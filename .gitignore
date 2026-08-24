@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# iwchaos — top-level .gitignore
+
+# Rust build artifacts
+rust/target/
+rust/iwchaos_rust.o
+
+# Fortran compiled objects
+fortran/*.o
+fortran/*.mod
+
+# Idris 2 generated C
+idris/generated/
+
+# Kernel build artifacts
+*.ko
+*.o
+*.mod
+*.mod.c
+*.mod.o
+*.symvers
+*.order
+.tmp_versions/
+Module.symvers
+modules.order
+
+# Agda checked modules
+agda/**/*.agdai
+
+# Editor artifacts
+.vscode/
+*.swp
+*~
+
+# PDF architecture doc stays tracked
+!iwchaos_architecture_blueprint.pdf

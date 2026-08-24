@@ -1,0 +1,23 @@
+[package]
+name = "iwchaos-rust"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "iwchaos_rust"
+crate-type = ["staticlib"]
+
+# No std — this is a kernel module
+[profile.release]
+panic = "abort"
+opt-level = 2
+lto = true
+codegen-units = 1
+
+[dependencies]
+# RFL bindings are provided by the kernel build system at compile time.
+# They are injected via --extern kernel= in the Kbuild RUSTFLAGS.
+# No external crates may be used — the kernel does not have std or alloc heap.
+
+[features]
+default = []
