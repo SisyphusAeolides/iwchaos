@@ -1,0 +1,14 @@
+package iwchaos-idris
+
+authors    = "Kenny Glowner"
+brief      = "iwchaos Idris 2 firmware state machine and chaos typing"
+version    = 0.1.0
+license    = "GPL-2.0-only"
+
+depends = linear
+
+sourcedir = "src"
+modules = FirmwareSM
+        , DmaLinear
+        , ChaosState
+        , ChannelSeq

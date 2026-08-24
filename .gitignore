@@ -3,11 +3,13 @@
 
 # Rust build artifacts
 rust/target/
-rust/iwchaos_rust.o
+rust/libiwchaos_core.a
 
-# Fortran compiled objects
+# Fortran compiled objects and test binaries
 fortran/*.o
 fortran/*.mod
+fortran/test/test_lorenz
+fortran/test/test_mandelbrot
 
 # Idris 2 generated C
 idris/generated/
@@ -34,3 +36,9 @@ agda/**/*.agdai
 
 # PDF architecture doc stays tracked
 !iwchaos_architecture_blueprint.pdf
+.*.cmd
+.*.d
+c/.*.cmd
+c/.*.d
+c/*.o
+idris/test_build/

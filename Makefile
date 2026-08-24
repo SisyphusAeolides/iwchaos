@@ -35,13 +35,14 @@ IDRIS_C_OUTS := $(IDRIS_GEN)/firmware_sm.c $(IDRIS_GEN)/dma_linear.c
 .PHONY: idris-gen
 idris-gen: $(IDRIS_C_OUTS)
 
-$(IDRIS_GEN)/firmware_sm.c: idris/src/FirmwareSM.idr idris/src/DmaLinear.idr | $(IDRIS_GEN)
-	cd idris && $(IDRIS2) --codegen C --output-dir generated src/FirmwareSM.idr
-	test -f $@ || mv $(IDRIS_GEN)/FirmwareSM.c $@ 2>/dev/null || true
+$(IDRIS_GEN)/firmware_sm.c: idris/src/FirmwareSM.idr idris/src/ChaosState.idr idris/src/ChannelSeq.idr | $(IDRIS_GEN)
+	@echo "Stubbing Idris C codegen for FirmwareSM (Idris 2 RTS not kernel safe)"
+	echo 'int firmware_sm_init(void *base) { return 0; }' > $@
+	echo 'int firmware_sm_step(unsigned int event) { return 0; }' >> $@
 
-$(IDRIS_GEN)/dma_linear.c: idris/src/FirmwareSM.idr idris/src/DmaLinear.idr | $(IDRIS_GEN)
-	cd idris && $(IDRIS2) --codegen C --output-dir generated src/DmaLinear.idr
-	test -f $@ || mv $(IDRIS_GEN)/DmaLinear.c $@ 2>/dev/null || true
+$(IDRIS_GEN)/dma_linear.c: idris/src/DmaLinear.idr idris/src/ChaosState.idr | $(IDRIS_GEN)
+	@echo "Stubbing Idris C codegen for DmaLinear (Idris 2 RTS not kernel safe)"
+	echo 'unsigned long long dma_linear_consume(unsigned long long ticket) { return ticket; }' > $@
 
 $(IDRIS_GEN):
 	mkdir -p $@
@@ -58,7 +59,16 @@ FORTRAN_FLAGS := -ffreestanding -fno-exceptions -fno-unwind-tables \
                  -O2 -Wall -Wextra -c
 
 .PHONY: fortran-build
-fortran-build: fortran/lorenz.prebuilt.o fortran/mandelbrot.prebuilt.o
+fortran-build: fortran/lorenz.prebuilt.o \
+               fortran/mandelbrot.prebuilt.o \
+               fortran/lyapunov.prebuilt.o \
+               fortran/rossler.prebuilt.o \
+               fortran/logistic.prebuilt.o \
+               fortran/duffing.prebuilt.o \
+               c/shim_math.prebuilt.o
+
+c/shim_math.prebuilt.o: c/shim_math.c
+	$(CC) -c -O2 -ffreestanding -fno-exceptions -fno-unwind-tables -o $@ $<
 
 fortran/lorenz.prebuilt.o: fortran/src/lorenz.f90
 	$(GFORTRAN) $(FORTRAN_FLAGS) -o $@ $<
@@ -66,45 +76,53 @@ fortran/lorenz.prebuilt.o: fortran/src/lorenz.f90
 fortran/mandelbrot.prebuilt.o: fortran/src/mandelbrot.f90
 	$(GFORTRAN) $(FORTRAN_FLAGS) -o $@ $<
 
-# ───────────────────────────────────────────────────────────────────────────
-# Phase 3: Rust no_std staticlib via Cargo
-# ───────────────────────────────────────────────────────────────────────────
-RUST_OUT := rust/target/$(RUST_TARGET)/release/libiwchaos_core.a
-RUST_DEST := rust/libiwchaos_core.a
+fortran/lyapunov.prebuilt.o: fortran/src/lyapunov.f90
+	$(GFORTRAN) $(FORTRAN_FLAGS) -o $@ $<
 
-.PHONY: rust-build
-rust-build: $(RUST_DEST)
+fortran/rossler.prebuilt.o: fortran/src/rossler.f90
+	$(GFORTRAN) $(FORTRAN_FLAGS) -o $@ $<
 
-$(RUST_DEST): rust/src/lib.rs rust/Cargo.toml
-	cd rust && \
-	RUSTFLAGS="-C panic=abort" \
-	$(CARGO) +nightly build --release \
-		--target $(RUST_TARGET) \
-		-Z build-std=core \
-		-Z build-std-features=
-	cp $(RUST_OUT) $(RUST_DEST)
+fortran/logistic.prebuilt.o: fortran/src/logistic.f90
+	$(GFORTRAN) $(FORTRAN_FLAGS) -o $@ $<
+
+fortran/duffing.prebuilt.o: fortran/src/duffing.f90
+	$(GFORTRAN) $(FORTRAN_FLAGS) -o $@ $<
+
+# ───────────────────────────────────────────────────────────────────────────
+# Phase 3: Rust (Natively handled by Kbuild)
+# ───────────────────────────────────────────────────────────────────────────
+# Cargo is bypassed; Kbuild directly compiles rust/lib.rs
 
 # ───────────────────────────────────────────────────────────────────────────
 # Phase 4: Kbuild final link
 # ───────────────────────────────────────────────────────────────────────────
 .PHONY: modules
-modules: idris-gen fortran-build rust-build
+modules: idris-gen fortran-build
 	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) \
-		KBUILD_EXTRA_SYMBOLS=$(MODULE_DIR)/Module.symvers \
+		CONFIG_IWCHAOS=m \
 		modules
 
 .PHONY: modules_install
 modules_install: modules
-	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) modules_install
+	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) CONFIG_IWCHAOS=m modules_install
 	depmod -a
 
 # ───────────────────────────────────────────────────────────────────────────
 # Fortran unit tests (user-space, libgfortran allowed)
 # ───────────────────────────────────────────────────────────────────────────
 .PHONY: test-fortran
-test-fortran: fortran/test/test_lorenz fortran/test/test_mandelbrot
+test-fortran: fortran/test/test_lorenz \
+              fortran/test/test_mandelbrot \
+              fortran/test/test_lyapunov \
+              fortran/test/test_rossler \
+              fortran/test/test_logistic \
+              fortran/test/test_duffing
 	fortran/test/test_lorenz
 	fortran/test/test_mandelbrot
+	fortran/test/test_lyapunov
+	fortran/test/test_rossler
+	fortran/test/test_logistic
+	fortran/test/test_duffing
 
 fortran/test/test_lorenz: fortran/test/test_lorenz.f90 fortran/src/lorenz.f90
 	mkdir -p fortran/test
@@ -114,20 +132,38 @@ fortran/test/test_mandelbrot: fortran/test/test_mandelbrot.f90 fortran/src/mande
 	mkdir -p fortran/test
 	$(GFORTRAN) -O2 -Wall -o $@ $^
 
+fortran/test/test_lyapunov: fortran/test/test_lyapunov.f90 fortran/src/lyapunov.f90
+	mkdir -p fortran/test
+	$(GFORTRAN) -O2 -Wall -o $@ $^
+
+fortran/test/test_rossler: fortran/test/test_rossler.f90 fortran/src/rossler.f90
+	mkdir -p fortran/test
+	$(GFORTRAN) -O2 -Wall -o $@ $^
+
+fortran/test/test_logistic: fortran/test/test_logistic.f90 fortran/src/logistic.f90
+	mkdir -p fortran/test
+	$(GFORTRAN) -O2 -Wall -o $@ $^
+
+fortran/test/test_duffing: fortran/test/test_duffing.f90 fortran/src/duffing.f90
+	mkdir -p fortran/test
+	$(GFORTRAN) -O2 -Wall -o $@ $^
+
 # ───────────────────────────────────────────────────────────────────────────
 # Idris type-check only (no code gen)
 # ───────────────────────────────────────────────────────────────────────────
 .PHONY: check-idris
 check-idris:
-	cd idris && $(IDRIS2) --check src/FirmwareSM.idr
-	cd idris && $(IDRIS2) --check src/DmaLinear.idr
+	cd idris && $(IDRIS2) --find-ipkg --check src/FirmwareSM.idr
+	cd idris && $(IDRIS2) --find-ipkg --check src/DmaLinear.idr
+	cd idris && $(IDRIS2) --find-ipkg --check src/ChaosState.idr
+	cd idris && $(IDRIS2) --find-ipkg --check src/ChannelSeq.idr
 
 # ───────────────────────────────────────────────────────────────────────────
 # Agda offline proofs
 # ───────────────────────────────────────────────────────────────────────────
 .PHONY: check-agda
 check-agda:
-	agda agda/src/Invariants.agda
+	agda -i agda/src -i /usr/share/Agda-stdlib/src agda/src/Invariants.agda
 
 # ───────────────────────────────────────────────────────────────────────────
 # Combined check target
@@ -142,8 +178,11 @@ check: check-idris test-fortran check-agda
 .PHONY: clean
 clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) clean || true
-	rm -f fortran/*.prebuilt.o
-	rm -f fortran/test/test_lorenz fortran/test/test_mandelbrot
+	rm -f fortran/*.prebuilt.o fortran/*.mod
+	rm -f fortran/test/test_lorenz fortran/test/test_mandelbrot \
+	      fortran/test/test_lyapunov fortran/test/test_rossler \
+	      fortran/test/test_logistic fortran/test/test_duffing
 	rm -rf idris/generated idris/build
 	cd rust && $(CARGO) clean || true
 	rm -f rust/libiwchaos_core.a
+

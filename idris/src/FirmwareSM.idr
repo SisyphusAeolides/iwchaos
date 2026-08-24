@@ -46,23 +46,36 @@ data DmaTicket : Type where
 ||| Consumes the PowerOff proof linearly.
 export
 claimPci : (1 _ : FirmwareState) -> FirmwareState
-claimPci PowerOff = PciReady
-claimPci _        = FwError   -- illegal transition
+claimPci PowerOff  = PciReady
+claimPci PciReady  = FwError   -- already claimed
+claimPci FwLoaded  = FwError   -- illegal: load before claim
+claimPci MacActive = FwError   -- illegal: MAC already active
+claimPci FwError   = FwError   -- already in error
 
 ||| Load the firmware image using a DMA ticket.
 ||| The ticket is consumed exactly once here (linear multiplicity).
 export
-loadFirmware : (1 _ : FirmwareState) -> (1 _ : DmaTicket) -> FirmwareState
-loadFirmware PciReady _ = FwLoaded
-loadFirmware _        _ = FwError
+loadFirmware : (1 _ : FirmwareState) -> (1 ticket : DmaTicket) -> FirmwareState
+loadFirmware PciReady  (MkDmaTicket _) = FwLoaded
+loadFirmware PowerOff  (MkDmaTicket _) = FwError  -- must claim PCIe first
+loadFirmware FwLoaded  (MkDmaTicket _) = FwError  -- already loaded
+loadFirmware MacActive (MkDmaTicket _) = FwError  -- already running
+loadFirmware FwError   (MkDmaTicket _) = FwError  -- in error, reset first
 
 ||| Start the firmware and activate the MAC layer.
 export
 startMac : (1 _ : FirmwareState) -> FirmwareState
-startMac FwLoaded = MacActive
-startMac _        = FwError
+startMac FwLoaded  = MacActive
+startMac PowerOff  = FwError   -- must load firmware first
+startMac PciReady  = FwError   -- must load firmware first
+startMac MacActive = FwError   -- already running
+startMac FwError   = FwError   -- in error, reset first
 
 ||| Reset firmware on error or unload.
 export
 resetFirmware : (1 _ : FirmwareState) -> FirmwareState
-resetFirmware _ = PowerOff
+resetFirmware PowerOff  = PowerOff   -- already off
+resetFirmware PciReady  = PowerOff   -- release PCIe
+resetFirmware FwLoaded  = PowerOff   -- abort load
+resetFirmware MacActive = PowerOff   -- shutdown MAC
+resetFirmware FwError   = PowerOff   -- recover from error

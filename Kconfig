@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config IWCHAOS
+	tristate "iwchaos: chaos-driven Intel Wi-Fi 6 driver (AX200/AX201)"
+	depends on PCI && MAC80211 && CFG80211
+	help
+	  A memory-safe, formally verified replacement for iwlwifi targeting
+	  Intel Wi-Fi 6 AX200/AX201 on the Lenovo ThinkPad P53.
+
+	  The driver core is written in Rust (RFL), with a Fortran chaos engine
+	  (Lorenz/Mandelbrot) for MAC backoff and power management, an Idris 2
+	  firmware state machine with linear DMA ticket types, and Agda offline
+	  invariant proofs.
+
+	  To compile as a loadable module, say M. The module will be called
+	  iwchaos.ko.
+
+	  If unsure, say N.

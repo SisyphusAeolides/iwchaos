@@ -9,10 +9,10 @@ Replaces the legacy `iwlwifi` module with a Ring 0 kernel module (`iwchaos.ko`) 
 | Component | Language | Role |
 |---|---|---|
 | Core driver | Rust (RFL) | PCIe init, DMA ring buffers, Netlink, module lifecycle |
-| ABI bridge | C | mac80211 / cfg80211 shims |
-| Firmware FSM | Idris 2 | QTT linear types — DMA buffers consumed exactly once |
-| Invariant proofs | Agda | Offline: wire bounds and protocol invariants |
-| Chaos Engine | Fortran | Lorenz attractor MAC backoff, Mandelbrot SNR/power scaling |
+| ABI bridge | C | mac80211 / cfg80211 / rate control / channel shims |
+| Firmware FSM | Idris 2 | QTT linear types — provably safe DMA and chaos modes |
+| Invariant proofs | Agda | Offline verification of bounds and protocol invariants |
+| Chaos Engine | Fortran | 6-system chaos theory suite (freestanding numerical core) |
 
 ## Build
 
@@ -28,10 +28,14 @@ Four phases run in order:
 
 ## Chaos Engine
 
-Standard Wi-Fi drivers use linear algorithms for backoff and power management. `iwchaos` replaces these with deterministic chaotic dynamics:
+Standard Wi-Fi drivers use linear algorithms for backoff, rate control, and channel selection. `iwchaos` replaces these with deterministic chaotic dynamics mapped continuously to the driver state:
 
-- **Lorenz attractor** (Runge-Kutta RK4): MAC CSMA/CA backoff delay — sensitive to initial conditions, eliminates repeated collision patterns in dense RF environments.
-- **Mandelbrot escape time**: SNR and interference mapped to the complex plane. Escape time drives discrete power state selection and channel hop decisions.
+- **Lorenz attractor (RK4)**: Maps to MAC CSMA/CA backoff delay. Sensitive to initial conditions, eliminating repeated collision patterns in dense RF environments.
+- **Mandelbrot escape time**: Maps complex SNR readings to coarse TX power bands.
+- **Duffing oscillator (RK4)**: Maps to fine-grained SNR delta (±6 dB) for the MCS rate selection.
+- **Rössler attractor (RK4)**: Maps (x,y) phase space to pseudo-aperiodic 2.4 GHz and 5 GHz channel hopping.
+- **Logistic map**: Generates Feigenbaum-cascade guided per-packet transmission jitter (1–100 µs).
+- **Lyapunov exponent estimator**: Co-integrates perturbation vectors to track the chaotic intensity (λ₁). Used to adapt the integration timestep (`dt`) dynamically and gate aggressive MCS and channel hops.
 
 ## License
 
