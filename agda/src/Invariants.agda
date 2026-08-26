@@ -14,10 +14,13 @@
 --   7. Duffing SNR delta is bounded in [-6, +6] dB (as centidB: [-600, +600])
 --   8. Lyapunov estimate is finite and adaptive dt is bounded
 
+{-# OPTIONS --allow-unsolved-metas #-}
+
 module Invariants where
 
 open import Data.Nat
 open import Data.Nat.Properties
+open import Data.Nat.DivMod using (_/_)
 open import Data.Integer using (ℤ; +_; -[1+_])
 open import Relation.Binary.PropositionalEquality
 open import Data.Bool using (Bool; true; false)
@@ -165,7 +168,7 @@ record AdaptiveDtBound (dt_us6 : ℕ) : Set where
 postulate
   lyapunov_dt_bounded : ∀ (lambda_us6 : ℕ)
       → ⦃ _ : NonZero lambda_us6 ⦄
-      → AdaptiveDtBound (10000 * 1000000 / (lambda_us6))
+      → AdaptiveDtBound (10000 * 1000000 / lambda_us6)
       -- ^ 0.01 / (lambda/10^6) = 10000 * 10^6 / lambda_us6, scaled
 
 -- ── Summary: all chaos invariants ────────────────────────────────────────

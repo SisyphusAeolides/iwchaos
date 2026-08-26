@@ -9,37 +9,47 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    container: fedora:42
+    container:
+      image: fedora:42
     steps:
       - uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
           dnf install -y --setopt=install_weak_deps=False \
-            gcc gfortran make git \
-            idris2 Agda
+            gcc gcc-gfortran make git glibc-langpack-en \
+            idris2 Agda Agda-stdlib
+          localedef -i en_US -f UTF-8 en_US.UTF-8 || true
+        env:
+          LC_ALL: en_US.UTF-8
 
       - name: Type-check Idris sources
         run: make check-idris
+        env:
+          LC_ALL: en_US.UTF-8
 
       - name: Run Fortran unit tests
         run: make test-fortran
 
       - name: Check Agda invariants
         run: make check-agda
+        env:
+          LC_ALL: en_US.UTF-8
 
   module-build:
     runs-on: ubuntu-latest
-    continue-on-error: true
+    container:
+      image: fedora:42
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install kernel headers and toolchain
+      - name: Install kernel build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc gfortran make linux-headers-generic \
-            idris2
+          dnf install -y --setopt=install_weak_deps=False \
+            gcc gcc-gfortran make git curl patch python3 rust \
+            kernel kernel-devel
 
       - name: Build kernel module
-        run: make modules
+        run: |
+          kver="$(ls -1 /lib/modules | sort -V | tail -1)"
+          make modules "KERNEL_SRC=/lib/modules/${kver}/build"
