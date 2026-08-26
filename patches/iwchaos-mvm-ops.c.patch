@@ -1,0 +1,53 @@
+--- vendor/iwlwifi/mvm/ops.c	2026-08-26 18:21:15.966074494 -0500
++++ vendor.clean/iwlwifi/mvm/ops.c	2026-08-26 18:20:39.893876468 -0500
+@@ -31,10 +31,7 @@
+ #include "fw/uefi.h"
+ #include "time-sync.h"
+ 
+-#define DRV_DESCRIPTION	"The new Intel(R) wireless AGN driver for Linux"
+-MODULE_DESCRIPTION(DRV_DESCRIPTION);
+-MODULE_LICENSE("GPL");
+-MODULE_IMPORT_NS("IWLWIFI");
++#define DRV_DESCRIPTION	"The new Intel(R) wireless AGN driver for Linux (iwchaos)"
+ 
+ static const struct iwl_op_mode_ops iwl_mvm_ops;
+ static const struct iwl_op_mode_ops iwl_mvm_ops_mq;
+@@ -50,32 +47,32 @@
+ /*
+  * module init and exit functions
+  */
+-static int __init iwl_mvm_init(void)
++int iwchaos_mvm_init(void)
+ {
+ 	int ret;
+ 
+ 	ret = iwl_mvm_rate_control_register();
+ 	if (ret) {
+-		pr_err("Unable to register rate control algorithm: %d\n", ret);
++		pr_err("iwchaos: rate control register failed: %d\n", ret);
+ 		return ret;
+ 	}
+ 
+ 	ret = iwl_opmode_register("iwlmvm", &iwl_mvm_ops);
+ 	if (ret) {
+-		pr_err("Unable to register MVM op_mode: %d\n", ret);
++		pr_err("iwchaos: MVM opmode register failed: %d\n", ret);
+ 		iwl_mvm_rate_control_unregister();
++	} else {
++		pr_info("iwchaos: MVM opmode ready\n");
+ 	}
+ 
+ 	return ret;
+ }
+-module_init(iwl_mvm_init);
+ 
+-static void __exit iwl_mvm_exit(void)
++void iwchaos_mvm_exit(void)
+ {
+ 	iwl_opmode_deregister("iwlmvm");
+ 	iwl_mvm_rate_control_unregister();
+ }
+-module_exit(iwl_mvm_exit);
+ 
+ static void iwl_mvm_nic_config(struct iwl_op_mode *op_mode)
+ {

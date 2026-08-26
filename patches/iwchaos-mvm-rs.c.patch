@@ -1,0 +1,30 @@
+--- vendor/iwlwifi/mvm/rs.c	2026-08-26 18:21:17.008077782 -0500
++++ vendor.clean/iwlwifi/mvm/rs.c	2026-08-26 18:20:48.596928102 -0500
+@@ -22,6 +22,7 @@
+ #include "iwl-op-mode.h"
+ #include "mvm.h"
+ #include "debugfs.h"
++#include "iwchaos_chaos.h"
+ 
+ #define IWL_RATE_MAX_WINDOW		62	/* # tx in history window */
+ 
+@@ -1177,6 +1178,8 @@
+ 	    info->flags & IEEE80211_TX_CTL_NO_ACK)
+ 		return;
+ 
++	iwchaos_chaos_tx_feedback(!!(info->flags & IEEE80211_TX_STAT_ACK), 0);
++
+ 	iwl_mvm_rs_tx_status(mvm, sta, rs_get_tid(hdr), info,
+ 			     ieee80211_is_qos_nullfunc(hdr->frame_control));
+ }
+@@ -2262,6 +2265,10 @@
+ 		break;
+ 	}
+ 
++	iwchaos_chaos_tick();
++	if (update_lq)
++		index = iwchaos_chaos_rate_bias(index, low, high);
++
+ lq_update:
+ 	/* Replace uCode's rate table for the destination station. */
+ 	if (update_lq) {

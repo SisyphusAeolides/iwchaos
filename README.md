@@ -1,42 +1,59 @@
 # iwchaos
 
-A memory-safe, formally verified, chaos-driven rewrite of the Linux Intel Wi-Fi driver.
+Complete drop-in replacement for the Linux `iwlwifi` + `iwlmvm` stack on Intel AX200/AX201 (ThinkPad P53 class), with a chaos-theory rate-control layer.
 
-Replaces the legacy `iwlwifi` module with a Ring 0 kernel module (`iwchaos.ko`) built from a five-language stack targeting the Lenovo ThinkPad P53 on CIQ RLC Pro (6.12 kernel).
+## Stack
 
-## Architecture
-
-| Component | Language | Role |
+| Layer | Language | Role |
 |---|---|---|
-| Core driver | Rust (RFL) | PCIe init, DMA ring buffers, Netlink, module lifecycle |
-| ABI bridge | C | mac80211 / cfg80211 / rate control / channel shims |
-| Firmware FSM | Idris 2 | QTT linear types — provably safe DMA and chaos modes |
-| Invariant proofs | Agda | Offline verification of bounds and protocol invariants |
-| Chaos Engine | Fortran | 6-system chaos theory suite (freestanding numerical core) |
+| Intel transport + MVM | C (vendored v7.2 + patches) | PCIe, firmware, mac80211, LEDs |
+| Chaos policy | Rust (RFL) | Rate bias, TX feedback, Lyapunov/Lorenz/etc. |
+| Chaos numerics (kernel) | Fortran | Freestanding RK4 / iterators linked into `.ko` |
+| Chaos numerics (userspace) | Rust crate [`iwchaos-chaos`](iwchaos-chaos/) | Same dynamics for simulation/tests |
+| Firmware FSM | Idris 2 | Type-checked state machine (stub C codegen for ring 0) |
+| Invariants | Agda | Offline proofs |
 
 ## Build
 
-```
+```sh
 make modules KERNEL_SRC=/lib/modules/$(uname -r)/build
 ```
 
-Four phases run in order:
-1. **Idris 2** — generates verified C from `idris/src/`
-2. **Fortran** — compiles freestanding `.o` files from `fortran/src/`
-3. **Rust/Cargo** — builds `no_std` staticlib via RFL
-4. **Kbuild** — links all components into `iwchaos.ko`
+Vendor iwlwifi sources are fetched automatically from Linux v7.2 and patched in-place.
 
-## Chaos Engine
+## Install and swap
 
-Standard Wi-Fi drivers use linear algorithms for backoff, rate control, and channel selection. `iwchaos` replaces these with deterministic chaotic dynamics mapped continuously to the driver state:
+```sh
+sudo make modules_install install
+sudo ./scripts/swap-iwchaos.sh
+```
 
-- **Lorenz attractor (RK4)**: Maps to MAC CSMA/CA backoff delay. Sensitive to initial conditions, eliminating repeated collision patterns in dense RF environments.
-- **Mandelbrot escape time**: Maps complex SNR readings to coarse TX power bands.
-- **Duffing oscillator (RK4)**: Maps to fine-grained SNR delta (±6 dB) for the MCS rate selection.
-- **Rössler attractor (RK4)**: Maps (x,y) phase space to pseudo-aperiodic 2.4 GHz and 5 GHz channel hopping.
-- **Logistic map**: Generates Feigenbaum-cascade guided per-packet transmission jitter (1–100 µs).
-- **Lyapunov exponent estimator**: Co-integrates perturbation vectors to track the chaotic intensity (λ₁). Used to adapt the integration timestep (`dt`) dynamically and gate aggressive MCS and channel hops.
+Restore stock iwlwifi:
 
-## License
+```sh
+sudo ./scripts/restore-iwlwifi.sh
+```
 
-GPL-2.0-only
+`modprobe.d/iwchaos.conf` blacklists `iwlwifi` and `iwlmvm` and redirects them to `iwchaos`.
+
+## Verify
+
+```sh
+lsmod | grep -E 'iwchaos|iwlwifi'
+dmesg | grep iwchaos | tail
+ls /sys/class/leds/phy*-led   # ThinkPad WiFi LED
+```
+
+## Checks
+
+```sh
+make check
+```
+
+## Crate
+
+Publish or depend on the userspace library:
+
+```sh
+cd iwchaos-chaos && cargo test
+```

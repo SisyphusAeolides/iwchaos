@@ -1,0 +1,19 @@
+[package]
+name = "iwchaos-chaos"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+license = "GPL-2.0-or-later"
+description = "Chaos-theory link dynamics used by the iwchaos Intel Wi-Fi driver"
+repository = "https://github.com/SisyphusAeolides/iwchaos"
+homepage = "https://github.com/SisyphusAeolides/iwchaos"
+readme = "README.md"
+keywords = ["wifi", "chaos", "lorenz", "wireless"]
+categories = ["science", "simulation"]
+
+[lib]
+name = "iwchaos_chaos"
+path = "src/lib.rs"
+
+[dev-dependencies]
+approx = "0.5"

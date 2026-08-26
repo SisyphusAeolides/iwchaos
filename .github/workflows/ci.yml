@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    container: fedora:42
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            gcc gfortran make git \
+            idris2 Agda
+
+      - name: Type-check Idris sources
+        run: make check-idris
+
+      - name: Run Fortran unit tests
+        run: make test-fortran
+
+      - name: Check Agda invariants
+        run: make check-agda
+
+  module-build:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kernel headers and toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc gfortran make linux-headers-generic \
+            idris2
+
+      - name: Build kernel module
+        run: make modules

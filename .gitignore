@@ -4,15 +4,22 @@
 # Rust build artifacts
 rust/target/
 rust/libiwchaos_core.a
+iwchaos-chaos/target/
 
 # Fortran compiled objects and test binaries
 fortran/*.o
 fortran/*.mod
 fortran/test/test_lorenz
 fortran/test/test_mandelbrot
+fortran/test/test_lyapunov
+fortran/test/test_rossler
+fortran/test/test_logistic
+fortran/test/test_duffing
+*.mod
 
 # Idris 2 generated C
 idris/generated/
+idris/build/
 
 # Kernel build artifacts
 *.ko
@@ -25,6 +32,10 @@ idris/generated/
 .tmp_versions/
 Module.symvers
 modules.order
+
+# Vendored iwlwifi (fetched at build time)
+vendor/
+vendor.clean/
 
 # Agda checked modules
 agda/**/*.agdai
