@@ -3,7 +3,10 @@
 
 # Rust build artifacts
 rust/target/
+rust/.ar-extract/
 rust/libiwchaos_core.a
+rust/libiwchaos_core.prebuilt.o
+*.BTF.*
 iwchaos-chaos/target/
 
 # Fortran compiled objects and test binaries

@@ -7,8 +7,8 @@ config IWCHAOS
 	  A memory-safe, formally verified replacement for iwlwifi targeting
 	  Intel Wi-Fi 6 AX200/AX201 on the Lenovo ThinkPad P53.
 
-	  The driver core is written in Rust (RFL), with a Fortran chaos engine
-	  (Lorenz/Mandelbrot) for MAC backoff and power management, an Idris 2
+	  The driver core is written in Rust (freestanding staticlib), with a Fortran
+	  chaos engine for MAC backoff and power management, an Idris 2 firmware
 	  firmware state machine with linear DMA ticket types, and Agda offline
 	  invariant proofs.
 

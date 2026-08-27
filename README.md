@@ -1,16 +1,19 @@
 # iwchaos
 
-Complete drop-in replacement for the Linux `iwlwifi` + `iwlmvm` stack on Intel AX200/AX201 (ThinkPad P53 class), with a chaos-theory rate-control layer.
+Drop-in replacement for Linux `iwlwifi` + `iwlmvm` on Intel AX200/AX201, with a
+chaos-theory rate-control layer. C is limited to module entry, FPU-guarded ABI
+shims, libm stubs for freestanding Fortran, and the vendored Intel transport.
 
 ## Stack
 
 | Layer | Language | Role |
 |---|---|---|
-| Intel transport + MVM | C (vendored v7.2 + patches) | PCIe, firmware, mac80211, LEDs |
-| Chaos policy | Rust (RFL) | Rate bias, TX feedback, Lyapunov/Lorenz/etc. |
-| Chaos numerics (kernel) | Fortran | Freestanding RK4 / iterators linked into `.ko` |
-| Chaos numerics (userspace) | Rust crate [`iwchaos-chaos`](iwchaos-chaos/) | Same dynamics for simulation/tests |
-| Firmware FSM | Idris 2 | Type-checked state machine (stub C codegen for ring 0) |
+| Module entry + FPU guards | C (thin) | `module_init`, `kernel_fpu_*`, chaos ABI |
+| Intel transport + MVM | C (vendored) | PCIe, firmware, mac80211, LEDs |
+| Chaos policy | Rust (`rust/` staticlib) | Rate bias, TX feedback, cadence ticks |
+| Chaos numerics | Fortran | Freestanding RK4 / iterators in `.ko` |
+| Chaos numerics (userspace) | Rust crate [`iwchaos-chaos`](iwchaos-chaos/) | Simulation / tests |
+| Firmware FSM | Idris 2 | Type-checked state machine (stub C for ring 0) |
 | Invariants | Agda | Offline proofs |
 
 ## Build
@@ -19,7 +22,21 @@ Complete drop-in replacement for the Linux `iwlwifi` + `iwlmvm` stack on Intel A
 make modules KERNEL_SRC=/lib/modules/$(uname -r)/build
 ```
 
-Vendor iwlwifi sources are fetched automatically from Linux v7.2 and patched in-place.
+Vendor iwlwifi sources are fetched automatically (Linux v7.2) and patched in-place.
+Rust is built as a freestanding `x86_64-unknown-none` staticlib (no `CONFIG_RUST` required).
+
+## DKMS
+
+```sh
+sudo dkms remove iwchaos/0.1.0 --all || true
+sudo rsync -a --delete --exclude='.git' --exclude='vendor' ./ /usr/src/iwchaos-0.1.0/
+# vendor is large; either copy it or let the build fetch:
+sudo cp -a vendor /usr/src/iwchaos-0.1.0/ 2>/dev/null || true
+sudo dkms add -m iwchaos -v 0.1.0
+sudo dkms install -m iwchaos -v 0.1.0 -k $(uname -r)
+```
+
+Or from the AUR-style package in Sisyphus-Repo: `sudo pacman -S iwchaos`.
 
 ## Install and swap
 
@@ -34,26 +51,19 @@ Restore stock iwlwifi:
 sudo ./scripts/restore-iwlwifi.sh
 ```
 
-`modprobe.d/iwchaos.conf` blacklists `iwlwifi` and `iwlmvm` and redirects them to `iwchaos`.
+`modprobe.d/iwchaos.conf` blacklists `iwlwifi` / `iwlmvm` and redirects them to `iwchaos`.
 
 ## Verify
 
 ```sh
 lsmod | grep -E 'iwchaos|iwlwifi'
 dmesg | grep iwchaos | tail
-ls /sys/class/leds/phy*-led   # ThinkPad WiFi LED
+ls /sys/class/leds/phy*-led
 ```
 
 ## Checks
 
 ```sh
 make check
-```
-
-## Crate
-
-Publish or depend on the userspace library:
-
-```sh
 cd iwchaos-chaos && cargo test
 ```

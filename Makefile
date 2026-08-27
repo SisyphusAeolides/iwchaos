@@ -127,9 +127,32 @@ fortran/duffing.prebuilt.o: fortran/src/duffing.f90
 	$(call strip_eh_frame,$@)
 
 # ───────────────────────────────────────────────────────────────────────────
-# Phase 3: Rust (Natively handled by Kbuild)
+# Phase 3: Rust freestanding staticlib (no RFL — works without CONFIG_RUST)
 # ───────────────────────────────────────────────────────────────────────────
-# Cargo is bypassed; Kbuild directly compiles rust/lib.rs
+RUST_DIR := rust
+# Arch rust lacks x86_64-unknown-none without rustup. Host no_std staticlib is fine
+# for in-kernel link (panic=abort, static relocation). Override with IWCHAOS_RUST_TARGET.
+RUST_TARGET := $(IWCHAOS_RUST_TARGET)
+RUST_TARGET_DIR := $(if $(RUST_TARGET),$(RUST_DIR)/target/$(RUST_TARGET)/release,$(RUST_DIR)/target/release)
+RUST_A := $(RUST_TARGET_DIR)/libiwchaos_core.a
+RUST_PREBUILT := $(RUST_DIR)/libiwchaos_core.prebuilt.o
+RUSTFLAGS_KERNEL := -C panic=abort -C code-model=kernel -C relocation-model=static -C debuginfo=0
+
+.PHONY: rust-build
+rust-build: $(RUST_PREBUILT)
+
+$(RUST_A): $(RUST_DIR)/src/lib.rs $(RUST_DIR)/Cargo.toml
+	cd $(RUST_DIR) && \
+		RUSTFLAGS='$(RUSTFLAGS_KERNEL)' $(CARGO) build --release \
+		$(if $(RUST_TARGET),--target $(RUST_TARGET),)
+
+$(RUST_PREBUILT): $(RUST_A)
+	@rm -rf $(RUST_DIR)/.ar-extract && mkdir -p $(RUST_DIR)/.ar-extract
+	cd $(RUST_DIR)/.ar-extract && $(AR) x ../target/$(if $(RUST_TARGET),$(RUST_TARGET)/,)release/libiwchaos_core.a
+	$(LD) -r -o $@ $(RUST_DIR)/.ar-extract/iwchaos_core*.rcgu.o
+	$(call strip_eh_frame,$@)
+	objcopy --remove-section=.comment --remove-section=.note --strip-debug $@ 2>/dev/null || true
+	rm -rf $(RUST_DIR)/.ar-extract
 
 # ───────────────────────────────────────────────────────────────────────────
 # Phase 4: Kbuild final link
@@ -137,17 +160,31 @@ fortran/duffing.prebuilt.o: fortran/src/duffing.f90
 .PHONY: vendor
 vendor:
 	@test -f vendor/iwlwifi/iwl-drv.c || ./scripts/fetch-iwlwifi-full.sh v7.2
-	@./scripts/apply-vendor-patches.sh
+	@grep -q iwchaos_iwlwifi_init vendor/iwlwifi/iwl-drv.c 2>/dev/null || \
+		./scripts/apply-vendor-patches.sh
+
+.PHONY: prebuilt-cmd
+prebuilt-cmd: rust-build fortran-build
+	@for o in c/shim_math.prebuilt.o rust/libiwchaos_core.prebuilt.o \
+		fortran/lorenz.prebuilt.o fortran/mandelbrot.prebuilt.o \
+		fortran/lyapunov.prebuilt.o fortran/rossler.prebuilt.o \
+		fortran/logistic.prebuilt.o fortran/duffing.prebuilt.o; do \
+		d=$$(dirname "$$o"); b=$$(basename "$$o"); \
+		printf 'cmd_%s := true\n' "$$o" > "$$d/.$$b.cmd"; \
+	done
 
 .PHONY: modules
-modules: idris-gen fortran-build vendor
+modules: idris-gen fortran-build rust-build vendor prebuilt-cmd
 	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) \
 		CONFIG_IWCHAOS=m \
+		CONFIG_DEBUG_INFO_BTF_MODULES=n \
+		LLVM=1 \
 		modules
 
 .PHONY: modules_install
 modules_install: modules
-	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) CONFIG_IWCHAOS=m modules_install
+	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) CONFIG_IWCHAOS=m \
+		CONFIG_DEBUG_INFO_BTF_MODULES=n LLVM=1 modules_install
 	depmod -a
 
 .PHONY: install-firmware
@@ -237,5 +274,5 @@ clean:
 	rm -f *.mod
 	rm -rf idris/generated idris/build
 	test -d rust && cd rust && $(CARGO) clean || true
-	rm -f rust/libiwchaos_core.a
+	rm -f rust/libiwchaos_core.a rust/libiwchaos_core.prebuilt.o
 
