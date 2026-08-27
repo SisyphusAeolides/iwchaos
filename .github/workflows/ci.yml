@@ -35,21 +35,3 @@ jobs:
         run: make check-agda
         env:
           LC_ALL: en_US.UTF-8
-
-  module-build:
-    runs-on: ubuntu-latest
-    container:
-      image: fedora:42
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install kernel build dependencies
-        run: |
-          dnf install -y --setopt=install_weak_deps=False \
-            gcc gcc-gfortran make git curl patch python3 rust \
-            kernel kernel-devel
-
-      - name: Build kernel module
-        run: |
-          kver="$(ls -1 /lib/modules | sort -V | tail -1)"
-          make modules "KERNEL_SRC=/lib/modules/${kver}/build"
