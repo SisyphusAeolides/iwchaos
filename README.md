@@ -2,7 +2,7 @@
 
 Drop-in replacement for Linux `iwlwifi` + `iwlmvm` on Intel AX200/AX201, with a
 chaos-theory rate-control layer. C is limited to module entry, FPU-guarded ABI
-shims, libm stubs for freestanding Fortran, and the vendored Intel transport.
+shims, and the vendored Intel transport.
 
 ## Stack
 
@@ -10,9 +10,9 @@ shims, libm stubs for freestanding Fortran, and the vendored Intel transport.
 |---|---|---|
 | Module entry + FPU guards | C (thin) | `module_init`, `kernel_fpu_*`, chaos ABI |
 | Intel transport + MVM | C (vendored) | PCIe, firmware, mac80211, LEDs |
-| Chaos policy | Rust (`rust/` staticlib) | Rate bias, TX feedback, cadence ticks |
-| Chaos numerics | Fortran | Freestanding RK4 / iterators in `.ko` |
+| Chaos policy + numerics | Rust (`rust/` staticlib) | Per-sta rate control, attractors, SNR feedback |
 | Chaos numerics (userspace) | Rust crate [`iwchaos-chaos`](iwchaos-chaos/) | Simulation / tests |
+| Fortran (offline only) | Fortran | `make test-fortran` unit tests |
 | Firmware FSM | Idris 2 | Type-checked state machine (stub C for ring 0) |
 | Invariants | Agda | Offline proofs |
 

@@ -102,28 +102,13 @@ iwchaos-y := \
 	$(MVM)/d3.o \
 	c/shim_module.o \
 	c/shim_chaos.o \
-	c/shim_math.prebuilt.o \
 	idris/generated/firmware_sm.o \
 	idris/generated/dma_linear.o \
-	rust/libiwchaos_core.prebuilt.o \
-	fortran/lorenz.prebuilt.o \
-	fortran/mandelbrot.prebuilt.o \
-	fortran/lyapunov.prebuilt.o \
-	fortran/rossler.prebuilt.o \
-	fortran/logistic.prebuilt.o \
-	fortran/duffing.prebuilt.o
+	rust/libiwchaos_core.prebuilt.o
 
 CFLAGS_vendor/iwlwifi/pcie/drv.o := -Wno-override-init
 
-# Freestanding Fortran / Rust / math stubs are not built by the kernel compiler.
-OBJECT_FILES_NON_STANDARD_c/shim_math.prebuilt.o := y
 OBJECT_FILES_NON_STANDARD_rust/libiwchaos_core.prebuilt.o := y
-OBJECT_FILES_NON_STANDARD_fortran/lorenz.prebuilt.o := y
-OBJECT_FILES_NON_STANDARD_fortran/mandelbrot.prebuilt.o := y
-OBJECT_FILES_NON_STANDARD_fortran/lyapunov.prebuilt.o := y
-OBJECT_FILES_NON_STANDARD_fortran/rossler.prebuilt.o := y
-OBJECT_FILES_NON_STANDARD_fortran/logistic.prebuilt.o := y
-OBJECT_FILES_NON_STANDARD_fortran/duffing.prebuilt.o := y
 
 ccflags-y := -I$(src)/include \
              -I$(src)/vendor/iwlwifi \

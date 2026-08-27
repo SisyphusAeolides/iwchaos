@@ -8,22 +8,29 @@
  
  #define IWL_RATE_MAX_WINDOW		62	/* # tx in history window */
  
-@@ -1177,6 +1178,8 @@
+@@ -1177,6 +1178,13 @@
  	    info->flags & IEEE80211_TX_CTL_NO_ACK)
  		return;
  
-+	iwchaos_chaos_tx_feedback(!!(info->flags & IEEE80211_TX_STAT_ACK), 0);
++	{
++		struct iwl_lq_sta *lq_sta = &mvmsta->deflink.lq_sta.rs_drv;
++
++		iwchaos_chaos_tx_feedback(mvmsta->deflink.sta_id,
++					  !!(info->flags & IEEE80211_TX_STAT_ACK),
++					  lq_sta->pers.last_rssi);
++	}
 +
  	iwl_mvm_rs_tx_status(mvm, sta, rs_get_tid(hdr), info,
  			     ieee80211_is_qos_nullfunc(hdr->frame_control));
  }
-@@ -2262,6 +2265,10 @@
+@@ -2262,6 +2270,10 @@
  		break;
  	}
  
-+	iwchaos_chaos_tick();
++	iwchaos_chaos_tick(mvmsta->deflink.sta_id);
 +	if (update_lq)
-+		index = iwchaos_chaos_rate_bias(index, low, high);
++		index = iwchaos_chaos_rate_select(mvmsta->deflink.sta_id,
++						  index, low, high);
 +
  lq_update:
  	/* Replace uCode's rate table for the destination station. */

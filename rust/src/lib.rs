@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-only
-//! Freestanding chaos core for iwchaos (no RFL — links into .ko via Cargo staticlib).
-//!
-//! Hot-path rate bias caches attractor state and only advances dynamics on a
-//! cadence so the TX completion path stays cheaper than a full multi-attractor
-//! tick every frame.
+//! Per-station chaos rate control for iwchaos (freestanding staticlib).
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
 
+mod chaos_math;
+
+use chaos_math::{
+    duffing_snr_delta_cd, logistic_jitter_us, lorenz_backoff_us, lyapunov_adaptive_dt,
+    lyapunov_est, lyapunov_step, mandelbrot_power, rossler_channels,
+};
 use core::ffi::c_int;
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -16,58 +18,7 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
-// ── Fortran chaos engine (freestanding objects linked at build time) ────────
-
-unsafe extern "C" {
-    fn lorenz_backoff_step(
-        x: *mut f64,
-        y: *mut f64,
-        z: *mut f64,
-        sigma: f64,
-        rho: f64,
-        beta: f64,
-        dt: f64,
-    ) -> f64;
-    fn mandelbrot_escape(cr: f64, ci: f64, max_iter: u32) -> u32;
-    fn lyapunov_step(
-        x: *mut f64,
-        y: *mut f64,
-        z: *mut f64,
-        dx: *mut f64,
-        dy: *mut f64,
-        dz: *mut f64,
-        sigma: f64,
-        rho: f64,
-        beta: f64,
-        dt: f64,
-    ) -> f64;
-    fn lyapunov_adaptive_dt(lyapunov_est: f64) -> f64;
-    fn rossler_step(
-        x: *mut f64,
-        y: *mut f64,
-        z: *mut f64,
-        a: f64,
-        b: f64,
-        c: f64,
-        dt: f64,
-    ) -> f64;
-    fn rossler_channel_24ghz(x_rossler: f64) -> u32;
-    fn rossler_channel_5ghz(y_rossler: f64) -> u32;
-    fn rossler_tx_power_mw(z_rossler: f64) -> u32;
-    fn logistic_jitter_us(x: *mut f64, r: f64, max_jitter_us: u32) -> u32;
-    fn duffing_step(
-        x: *mut f64,
-        y: *mut f64,
-        t: *mut f64,
-        delta: f64,
-        gamma: f64,
-        omega: f64,
-        dt: f64,
-    );
-    fn duffing_snr_delta_db(x: f64) -> f64;
-}
-
-/// Advance attractors at most once per this many hot-path calls.
+pub const IWCHAOS_STA_MAX: usize = 32;
 const TICK_CADENCE: u32 = 8;
 
 #[repr(C)]
@@ -126,7 +77,8 @@ pub struct ChaosParams {
     pub lyapunov_est: f64,
 }
 
-struct IwChaosDevice {
+struct IwChaosSta {
+    active: bool,
     lorenz: LorenzState,
     rossler: RosslerState,
     lyapunov: LyapunovState,
@@ -138,253 +90,185 @@ struct IwChaosDevice {
     tick_budget: u32,
 }
 
-struct GlobalChaos {
-    dev: IwChaosDevice,
+struct StaTable {
+    slots: [IwChaosSta; IWCHAOS_STA_MAX],
 }
 
-// Rate-control hooks run under mac80211; single global is sufficient here.
-unsafe impl Sync for GlobalChaos {}
+unsafe impl Sync for StaTable {}
 
-static mut GLOBAL_CHAOS: Option<GlobalChaos> = None;
+static mut STA_TABLE: StaTable = StaTable {
+    slots: [const { IwChaosSta::empty() }; IWCHAOS_STA_MAX],
+};
 static TICK_GEN: AtomicU32 = AtomicU32::new(0);
 
-fn default_device() -> IwChaosDevice {
-    IwChaosDevice {
-        lorenz: LorenzState {
-            x: 0.1,
-            y: 0.1,
-            z: 0.1,
-        },
-        rossler: RosslerState {
-            x: 0.1,
-            y: 0.0,
-            z: 0.0,
-        },
-        lyapunov: LyapunovState {
-            traj: LorenzState {
+impl IwChaosSta {
+    const fn empty() -> Self {
+        Self {
+            active: false,
+            lorenz: LorenzState {
                 x: 0.1,
                 y: 0.1,
                 z: 0.1,
             },
-            dx: 1.0,
-            dy: 0.0,
-            dz: 0.0,
-            sum: 0.0,
-            steps: 0,
-        },
-        duffing: DuffingState {
-            x: 1.0,
-            y: 0.0,
-            t: 0.0,
-        },
-        logistic: LogisticState { x: 0.3, r: 4.0 },
-        params: ChaosParams {
-            backoff_us: 10,
-            power_state: 2,
-            snr_delta_centidecibels: 0,
-            channel_24ghz: 1,
-            channel_5ghz: 36,
-            tx_power_mw: 50,
-            jitter_us: 1,
-            adaptive_dt: 0.01,
-            lyapunov_est: 0.906,
-        },
-        snr_real: 0.0,
-        snr_imag: 0.0,
-        tick_budget: 0,
-    }
-}
-
-fn with_global<R>(f: impl FnOnce(&mut IwChaosDevice) -> R) -> R {
-    unsafe {
-        if GLOBAL_CHAOS.is_none() {
-            GLOBAL_CHAOS = Some(GlobalChaos {
-                dev: default_device(),
-            });
-        }
-        f(&mut GLOBAL_CHAOS.as_mut().unwrap_unchecked().dev)
-    }
-}
-
-impl IwChaosDevice {
-    fn lorenz_backoff(&mut self) -> u64 {
-        const SIGMA: f64 = 10.0;
-        const RHO: f64 = 28.0;
-        const BETA: f64 = 8.0 / 3.0;
-        const DT: f64 = 0.01;
-
-        let s = &mut self.lorenz;
-        let x_out =
-            unsafe { lorenz_backoff_step(&mut s.x, &mut s.y, &mut s.z, SIGMA, RHO, BETA, DT) };
-        let clamped = if x_out < -20.0 {
-            -20.0
-        } else if x_out > 20.0 {
-            20.0
-        } else {
-            x_out
-        };
-        let norm = (clamped + 20.0) / 40.0;
-        (10.0 + norm * 990.0) as u64
-    }
-
-    fn mandelbrot_power(&mut self) -> u32 {
-        const MAX_ITER: u32 = 128;
-        let escape = unsafe { mandelbrot_escape(self.snr_real, self.snr_imag, MAX_ITER) };
-        (escape * 5 / MAX_ITER).min(4)
-    }
-
-    fn rossler_channels(&mut self) -> (u32, u32, u32) {
-        const A: f64 = 0.2;
-        const B: f64 = 0.2;
-        const C: f64 = 5.7;
-        const DT: f64 = 0.05;
-
-        let s = &mut self.rossler;
-        unsafe {
-            rossler_step(&mut s.x, &mut s.y, &mut s.z, A, B, C, DT);
-        }
-        let ch24 = unsafe { rossler_channel_24ghz(s.x) };
-        let ch5 = unsafe { rossler_channel_5ghz(s.y) * 4 + 36 };
-        let pwr = unsafe { rossler_tx_power_mw(s.z) };
-        (ch24, ch5, pwr)
-    }
-
-    fn logistic_jitter(&mut self) -> u32 {
-        let s = &mut self.logistic;
-        unsafe { logistic_jitter_us(&mut s.x, s.r, 100) }
-    }
-
-    fn lyapunov_tick(&mut self) -> f64 {
-        const SIGMA: f64 = 10.0;
-        const RHO: f64 = 28.0;
-        const BETA: f64 = 8.0 / 3.0;
-        const DT: f64 = 0.01;
-
-        let s = &mut self.lyapunov;
-        let log_growth = unsafe {
-            lyapunov_step(
-                &mut s.traj.x,
-                &mut s.traj.y,
-                &mut s.traj.z,
-                &mut s.dx,
-                &mut s.dy,
-                &mut s.dz,
-                SIGMA,
-                RHO,
-                BETA,
-                DT,
-            )
-        };
-        s.sum += log_growth;
-        s.steps += 1;
-        let est = if s.steps > 0 {
-            s.sum / (s.steps as f64 * DT)
-        } else {
-            0.906
-        };
-        unsafe { lyapunov_adaptive_dt(est) }
-    }
-
-    fn lyapunov_est(&self) -> f64 {
-        const DT: f64 = 0.01;
-        let s = &self.lyapunov;
-        if s.steps > 0 {
-            s.sum / (s.steps as f64 * DT)
-        } else {
-            0.906
+            rossler: RosslerState {
+                x: 0.1,
+                y: 0.0,
+                z: 0.0,
+            },
+            lyapunov: LyapunovState {
+                traj: LorenzState {
+                    x: 0.1,
+                    y: 0.1,
+                    z: 0.1,
+                },
+                dx: 1.0,
+                dy: 0.0,
+                dz: 0.0,
+                sum: 0.0,
+                steps: 0,
+            },
+            duffing: DuffingState {
+                x: 1.0,
+                y: 0.0,
+                t: 0.0,
+            },
+            logistic: LogisticState { x: 0.3, r: 4.0 },
+            params: ChaosParams {
+                backoff_us: 10,
+                power_state: 2,
+                snr_delta_centidecibels: 0,
+                channel_24ghz: 1,
+                channel_5ghz: 36,
+                tx_power_mw: 50,
+                jitter_us: 1,
+                adaptive_dt: 0.01,
+                lyapunov_est: 0.906,
+            },
+            snr_real: 0.0,
+            snr_imag: 0.0,
+            tick_budget: 0,
         }
     }
 
-    fn duffing_snr_delta(&mut self) -> i32 {
-        const DELTA: f64 = 0.3;
-        const GAMMA: f64 = 0.5;
-        const OMEGA: f64 = 1.2;
-        const DT: f64 = 0.01;
-
-        let s = &mut self.duffing;
-        unsafe {
-            duffing_step(&mut s.x, &mut s.y, &mut s.t, DELTA, GAMMA, OMEGA, DT);
-            let db = duffing_snr_delta_db(s.x);
-            let val = db * 100.0;
-            (val + if val < 0.0 { -0.5 } else { 0.5 }) as i32
+    fn ensure_active(&mut self) {
+        if !self.active {
+            *self = Self::empty();
+            self.active = true;
         }
     }
 
-    fn tick_chaos_full(&mut self) {
-        self.params.adaptive_dt = self.lyapunov_tick();
-        self.params.lyapunov_est = self.lyapunov_est();
-        self.params.backoff_us = self.lorenz_backoff();
-        self.params.power_state = self.mandelbrot_power();
-        self.params.snr_delta_centidecibels = self.duffing_snr_delta();
-        let (ch24, ch5, pwr) = self.rossler_channels();
+    fn tick_full(&mut self) {
+        let log_growth = lyapunov_step(&mut self.lyapunov, 10.0, 28.0, 8.0 / 3.0, 0.01);
+        self.lyapunov.sum += log_growth;
+        self.lyapunov.steps += 1;
+        self.params.lyapunov_est = lyapunov_est(&self.lyapunov);
+        self.params.adaptive_dt = lyapunov_adaptive_dt(self.params.lyapunov_est);
+        self.params.backoff_us = lorenz_backoff_us(&mut self.lorenz);
+        self.params.power_state = mandelbrot_power(self.snr_real, self.snr_imag);
+        self.params.snr_delta_centidecibels = duffing_snr_delta_cd(&mut self.duffing);
+        let (ch24, ch5, pwr) = rossler_channels(&mut self.rossler);
         self.params.channel_24ghz = ch24;
         self.params.channel_5ghz = ch5;
         self.params.tx_power_mw = pwr;
-        self.params.jitter_us = self.logistic_jitter();
+        self.params.jitter_us = logistic_jitter_us(&mut self.logistic, 100);
         TICK_GEN.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Cheap tick for the TX/rate hot path: full dynamics every TICK_CADENCE calls.
-    fn tick_chaos_hot(&mut self) {
+    fn tick_hot(&mut self) {
         if self.tick_budget == 0 {
-            self.tick_chaos_full();
+            self.tick_full();
             self.tick_budget = TICK_CADENCE;
         } else {
             self.tick_budget -= 1;
-            // Always advance the logistic map — one multiply, drives rate jitter.
-            self.params.jitter_us = self.logistic_jitter();
+            self.params.jitter_us = logistic_jitter_us(&mut self.logistic, 100);
         }
     }
 
     fn feedback(&mut self, tx_success: i32, snr_db: i32) {
         self.snr_real = (snr_db as f64) / 40.0;
         self.snr_imag = if tx_success != 0 { 0.0 } else { 0.5 };
-        // Force a full refresh after lossy TX so power/rate adapt quickly.
         if tx_success == 0 {
             self.tick_budget = 0;
         }
     }
-}
 
-#[no_mangle]
-pub extern "C" fn iwchaos_chaos_tick_rust() {
-    with_global(|dev| dev.tick_chaos_hot());
-}
+    fn rate_select(&mut self, hint: u8, low: i32, high: i32) -> u8 {
+        self.tick_hot();
+        let cp = &self.params;
 
-#[no_mangle]
-pub extern "C" fn iwchaos_chaos_rate_bias_rust(index: u8, low: u8, high: u8) -> u8 {
-    with_global(|dev| {
-        dev.tick_chaos_hot();
-        let cp = &dev.params;
-        let mut jitter = 0i32;
+        if low < 0 || high < 0 || low > high {
+            return hint;
+        }
+
+        let low = low as u8;
+        let high = high as u8;
+        let span = (high - low) as u32 + 1;
+        if span == 0 {
+            return hint;
+        }
+
+        let mut rel = (cp.power_state as u32 * (span - 1) / 4) as i32;
+        let snr = cp.snr_delta_centidecibels;
+        rel += if snr >= 0 {
+            (snr + 100) / 200
+        } else {
+            -(((-snr) + 100) / 200)
+        };
+
         if cp.lyapunov_est < 1.2 && cp.jitter_us > 0 {
             if cp.jitter_us < 34 {
-                jitter = -1;
+                rel -= 1;
             } else if cp.jitter_us > 66 {
-                jitter = 1;
+                rel += 1;
             }
         }
-        let mut idx = index as i32 + jitter;
-        // Prefer higher MCS when Mandelbrot power state is strong and SNR delta positive.
-        if cp.power_state >= 3 && cp.snr_delta_centidecibels > 50 {
-            idx += 1;
-        } else if cp.power_state <= 1 && cp.snr_delta_centidecibels < -50 {
-            idx -= 1;
+
+        if rel < 0 {
+            rel = 0;
         }
-        const INVALID: u8 = 0xff;
-        if low != INVALID {
-            idx = idx.max(low as i32);
+        if rel >= span as i32 {
+            rel = span as i32 - 1;
         }
-        if high != INVALID {
-            idx = idx.min(high as i32);
-        }
-        idx.max(0) as u8
-    })
+
+        low.saturating_add(rel as u8)
+    }
+}
+
+fn sta_index(sta_id: u8) -> usize {
+    (sta_id as usize) % IWCHAOS_STA_MAX
+}
+
+fn with_sta<R>(sta_id: u8, f: impl FnOnce(&mut IwChaosSta) -> R) -> R {
+    let idx = sta_index(sta_id);
+    unsafe {
+        let slot = &mut STA_TABLE.slots[idx];
+        slot.ensure_active();
+        f(slot)
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn iwchaos_chaos_tx_feedback_rust(tx_success: c_int, snr_db: c_int) {
-    with_global(|dev| dev.feedback(tx_success, snr_db));
+pub extern "C" fn iwchaos_chaos_tick_rust(sta_id: u8) {
+    with_sta(sta_id, |sta| sta.tick_hot());
+}
+
+#[no_mangle]
+pub extern "C" fn iwchaos_chaos_rate_select_rust(
+    sta_id: u8,
+    hint: u8,
+    low: c_int,
+    high: c_int,
+) -> u8 {
+    with_sta(sta_id, |sta| sta.rate_select(hint, low as i32, high as i32))
+}
+
+#[no_mangle]
+pub extern "C" fn iwchaos_chaos_tx_feedback_rust(
+    sta_id: u8,
+    tx_success: c_int,
+    snr_db: c_int,
+) {
+    with_sta(sta_id, |sta| sta.feedback(tx_success, snr_db));
 }
 
 #[no_mangle]
@@ -399,43 +283,44 @@ pub unsafe extern "C" fn iwchaos_update_all(
     out: *mut ChaosParams,
 ) {
     unsafe {
-        let mut dev = default_device();
-        if !lorenz.is_null() {
-            dev.lorenz = *lorenz;
-        }
-        if !rossler.is_null() {
-            dev.rossler = *rossler;
-        }
-        if !lyapunov.is_null() {
-            dev.lyapunov = *lyapunov;
-        }
-        if !duffing.is_null() {
-            dev.duffing = *duffing;
-        }
-        if !logistic.is_null() {
-            dev.logistic = *logistic;
-        }
-        dev.snr_real = snr_real;
-        dev.snr_imag = snr_imag;
-        dev.tick_chaos_full();
-        if !out.is_null() {
-            *out = dev.params;
+        with_sta(0, |sta| {
             if !lorenz.is_null() {
-                *lorenz = dev.lorenz;
+                sta.lorenz = *lorenz;
             }
             if !rossler.is_null() {
-                *rossler = dev.rossler;
+                sta.rossler = *rossler;
             }
             if !lyapunov.is_null() {
-                *lyapunov = dev.lyapunov;
+                sta.lyapunov = *lyapunov;
             }
             if !duffing.is_null() {
-                *duffing = dev.duffing;
+                sta.duffing = *duffing;
             }
             if !logistic.is_null() {
-                *logistic = dev.logistic;
+                sta.logistic = *logistic;
             }
-        }
+            sta.snr_real = snr_real;
+            sta.snr_imag = snr_imag;
+            sta.tick_full();
+            if !out.is_null() {
+                *out = sta.params;
+                if !lorenz.is_null() {
+                    *lorenz = sta.lorenz;
+                }
+                if !rossler.is_null() {
+                    *rossler = sta.rossler;
+                }
+                if !lyapunov.is_null() {
+                    *lyapunov = sta.lyapunov;
+                }
+                if !duffing.is_null() {
+                    *duffing = sta.duffing;
+                }
+                if !logistic.is_null() {
+                    *logistic = sta.logistic;
+                }
+            }
+        });
     }
 }
 

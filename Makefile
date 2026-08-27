@@ -164,17 +164,14 @@ vendor:
 		./scripts/apply-vendor-patches.sh
 
 .PHONY: prebuilt-cmd
-prebuilt-cmd: rust-build fortran-build
-	@for o in c/shim_math.prebuilt.o rust/libiwchaos_core.prebuilt.o \
-		fortran/lorenz.prebuilt.o fortran/mandelbrot.prebuilt.o \
-		fortran/lyapunov.prebuilt.o fortran/rossler.prebuilt.o \
-		fortran/logistic.prebuilt.o fortran/duffing.prebuilt.o; do \
+prebuilt-cmd: rust-build
+	@for o in rust/libiwchaos_core.prebuilt.o; do \
 		d=$$(dirname "$$o"); b=$$(basename "$$o"); \
-		printf 'cmd_%s := true\n' "$$o" > "$$d/.$$b.cmd"; \
+		printf 'cmd_./%s := true\nsavedcmd_./%s := true\n' "$$o" "$$o" > "$$d/.$$b.cmd"; \
 	done
 
 .PHONY: modules
-modules: idris-gen fortran-build rust-build vendor prebuilt-cmd
+modules: idris-gen rust-build vendor prebuilt-cmd
 	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) \
 		CONFIG_IWCHAOS=m \
 		CONFIG_DEBUG_INFO_BTF_MODULES=n \
