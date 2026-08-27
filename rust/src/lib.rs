@@ -273,7 +273,13 @@ impl IwChaosSta {
             rel = span as i32 - 1;
         }
 
-        low.saturating_add(rel as u8)
+        let chaos_idx = low.saturating_add(rel as u8);
+        if hint >= low && hint <= high {
+            let blended = ((chaos_idx as u16 * 3 + hint as u16) / 4) as u8;
+            blended.clamp(low, high)
+        } else {
+            chaos_idx
+        }
     }
 }
 

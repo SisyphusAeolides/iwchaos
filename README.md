@@ -56,14 +56,8 @@ sudo ./scripts/restore-iwlwifi.sh
 ## Verify
 
 ```sh
+make verify          # build + hooks + tests + runtime smoke (needs sudo for scan)
+make check           # userspace + fortran tests (idris/agda if installed)
 lsmod | grep -E 'iwchaos|iwlwifi'
 dmesg | grep iwchaos | tail
-ls /sys/class/leds/phy*-led
-```
-
-## Checks
-
-```sh
-make check
-cd iwchaos-chaos && cargo test
 ```

@@ -158,7 +158,7 @@ impl ChaosEngine {
     fn rossler_channels(&mut self) -> (u32, u32, u32) {
         rossler_step(&mut self.rossler, 0.2, 0.2, 5.7, 0.05);
         let ch24 = rossler_channel_24ghz(self.rossler.x);
-        let ch5 = rossler_channel_5ghz(self.rossler.y) * 4 + 36;
+        let ch5 = rossler_channel_5ghz(self.rossler.y);
         let pwr = rossler_tx_power_mw(self.rossler.z);
         (ch24, ch5, pwr)
     }
@@ -273,7 +273,7 @@ fn rossler_channel_24ghz(x: f64) -> u32 {
 }
 
 fn rossler_channel_5ghz(y: f64) -> u32 {
-    (y.abs() as u32) % 25
+    (y.abs() as u32 % 25) * 4 + 36
 }
 
 fn rossler_tx_power_mw(z: f64) -> u32 {
