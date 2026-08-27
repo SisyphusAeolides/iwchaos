@@ -192,6 +192,49 @@ impl IwChaosSta {
         }
     }
 
+    fn scan_iter_count(&mut self, channel: u16, band_2ghz: bool) -> u16 {
+        self.tick_hot();
+        let preferred = if band_2ghz {
+            self.params.channel_24ghz
+        } else {
+            self.params.channel_5ghz
+        };
+        let ch = channel as u32;
+        let pref = preferred;
+        if ch == pref {
+            3
+        } else if ch.abs_diff(pref) <= 4 {
+            2
+        } else {
+            1
+        }
+    }
+
+    fn scan_dwell_tu(&mut self, base: u16) -> u16 {
+        self.tick_hot();
+        let bias = (self.params.tx_power_mw as u32 * base as u32 / 200) as u16;
+        base.saturating_add(bias.min(30))
+    }
+
+    fn power_timeout_us(&mut self, base: u32) -> u32 {
+        self.tick_hot();
+        base.saturating_add(self.params.backoff_us as u32)
+    }
+
+    fn coex_agg_limit(&mut self, intel: u16) -> u16 {
+        self.tick_hot();
+        let jitter = self.params.jitter_us as u32;
+        let scaled = intel as u32 * (80 + jitter * 40 / 100) / 100;
+        scaled.clamp(200, 8000) as u16
+    }
+
+    fn quota_adjust(&mut self, intel: u32) -> u32 {
+        self.tick_hot();
+        let jitter = self.params.jitter_us as i32;
+        let delta = jitter * 5 / 100 - 2;
+        (intel as i32 + delta).clamp(1, 100) as u32
+    }
+
     fn rate_select(&mut self, hint: u8, low: i32, high: i32) -> u8 {
         self.tick_hot();
         let cp = &self.params;
@@ -327,4 +370,33 @@ pub unsafe extern "C" fn iwchaos_update_all(
 #[no_mangle]
 pub extern "C" fn iwchaos_rust_tick_gen() -> u32 {
     TICK_GEN.load(Ordering::Relaxed)
+}
+
+#[no_mangle]
+pub extern "C" fn iwchaos_chaos_scan_iter_count_rust(
+    ctx: u8,
+    channel: u16,
+    band_2ghz: u8,
+) -> u16 {
+    with_sta(ctx, |sta| sta.scan_iter_count(channel, band_2ghz != 0))
+}
+
+#[no_mangle]
+pub extern "C" fn iwchaos_chaos_scan_dwell_tu_rust(ctx: u8, base: u16) -> u16 {
+    with_sta(ctx, |sta| sta.scan_dwell_tu(base))
+}
+
+#[no_mangle]
+pub extern "C" fn iwchaos_chaos_power_timeout_us_rust(ctx: u8, base: u32) -> u32 {
+    with_sta(ctx, |sta| sta.power_timeout_us(base))
+}
+
+#[no_mangle]
+pub extern "C" fn iwchaos_chaos_coex_agg_limit_rust(sta_id: u8, intel: u16) -> u16 {
+    with_sta(sta_id, |sta| sta.coex_agg_limit(intel))
+}
+
+#[no_mangle]
+pub extern "C" fn iwchaos_chaos_quota_adjust_rust(binding: u8, intel: u32) -> u32 {
+    with_sta(binding, |sta| sta.quota_adjust(intel))
 }
