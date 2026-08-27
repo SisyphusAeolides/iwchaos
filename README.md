@@ -26,6 +26,16 @@ make modules KERNEL_SRC=/lib/modules/$(uname -r)/build
 Vendor iwlwifi sources are fetched automatically (Linux v7.2) and patched in-place.
 Rust is built as a freestanding `x86_64-unknown-none` staticlib (no `CONFIG_RUST` required).
 
+On CachyOS, install headers matching your running kernel before building:
+
+```sh
+# default cachyos kernel
+sudo pacman -S linux-cachyos-headers
+
+# bore-lto variant (after switching boot entry)
+sudo pacman -S linux-cachyos-bore-lto-headers
+```
+
 ## DKMS
 
 ```sh
@@ -35,6 +45,13 @@ sudo rsync -a --delete --exclude='.git' --exclude='vendor' ./ /usr/src/iwchaos-0
 sudo cp -a vendor /usr/src/iwchaos-0.1.0/ 2>/dev/null || true
 sudo dkms add -m iwchaos -v 0.1.0
 sudo dkms install -m iwchaos -v 0.1.0 -k $(uname -r)
+```
+
+After switching to another kernel (e.g. `7.2.0-1-cachyos-bore-lto`), rebuild for that kernel:
+
+```sh
+sudo dkms install --force -m iwchaos -v 0.1.0 -k $(uname -r)
+sudo modprobe -r iwchaos && sudo modprobe iwchaos
 ```
 
 Or from the AUR-style package in Sisyphus-Repo: `sudo pacman -S iwchaos`.

@@ -3,6 +3,7 @@
 
 # Rust build artifacts
 rust/target/
+chaos-math/target/
 rust/.ar-extract/
 rust/libiwchaos_core.a
 rust/libiwchaos_core.prebuilt.o
