@@ -8,7 +8,7 @@
  
  #define IWL_MVM_NUM_CTDP_STEPS		20
  #define IWL_MVM_MIN_CTDP_BUDGET_MW	150
-@@ -372,6 +373,8 @@
+@@ -373,6 +374,7 @@
  	};
  
  	backoff = max(backoff, mvm->thermal_throttle.min_backoff);

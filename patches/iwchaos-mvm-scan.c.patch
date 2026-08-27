@@ -1,14 +1,14 @@
 --- vendor/iwlwifi/mvm/scan.c
 +++ vendor/iwlwifi/mvm/scan.c
-@@ -11,6 +11,7 @@
+@@ -12,6 +12,7 @@
  #include "fw/api/scan.h"
  #include "iwl-io.h"
  #include "iwl-utils.h"
 +#include "iwchaos_chaos.h"
  
- /* adaptive dwell max budget time [TU] for full scan */
- #define IWL_MVM_ADWELL_MAX_BUDGET	0
-@@ -688,9 +689,15 @@
+ #define IWL_DENSE_EBS_SCAN_RATIO 5
+ #define IWL_SPARSE_EBS_SCAN_RATIO 1
+@@ -688,9 +689,14 @@
  	int i;
  
  	for (i = 0; i < n_channels; i++) {
@@ -24,7 +24,7 @@
  		channel_cfg[i].iter_interval = 0;
  		channel_cfg[i].flags =
  			cpu_to_le32(IWL_UNIFIED_SCAN_CHANNEL_PARTIAL |
-@@ -822,10 +829,18 @@
+@@ -822,10 +828,18 @@
  				    struct iwl_scan_req_lmac *cmd,
  				    struct iwl_mvm_scan_params *params)
  {
@@ -47,7 +47,7 @@
  	cmd->max_out_time = cpu_to_le32(scan_timing[params->type].max_out_time);
  	cmd->suspend_time = cpu_to_le32(scan_timing[params->type].suspend_time);
  	cmd->scan_prio = cpu_to_le32(IWL_SCAN_PRIORITY_EXT_6);
-@@ -1055,10 +1070,14 @@
+@@ -1055,10 +1069,14 @@
  static void iwl_mvm_fill_scan_dwell(struct iwl_mvm *mvm,
  				    struct iwl_scan_dwell *dwell)
  {
@@ -65,8 +65,8 @@
 +						      IWL_SCAN_DWELL_EXTENDED);
  }
  
- static void iwl_mvm_scan_umac_channel_cfg(struct iwl_mvm *mvm,
-@@ -1297,8 +1316,10 @@
+ static void iwl_mvm_fill_channels(struct iwl_mvm *mvm, u8 *channels,
+@@ -1297,8 +1315,10 @@
  	u8 active_dwell, passive_dwell;
  
  	timing = &scan_timing[params->type];
@@ -79,7 +79,7 @@
  
  	if (iwl_mvm_is_adaptive_dwell_supported(mvm)) {
  		cmd->v7.adwell_default_n_aps_social =
-@@ -1413,8 +1434,10 @@
+@@ -1405,8 +1425,10 @@
  	u8 active_dwell, passive_dwell;
  
  	timing = &scan_timing[params->type];

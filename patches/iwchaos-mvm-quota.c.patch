@@ -8,8 +8,7 @@
  
  #define QUOTA_100	IWL_MVM_MAX_QUOTA
  #define QUOTA_LOWLAT_MIN ((QUOTA_100 * IWL_MVM_LOWLAT_QUOTA_MIN_PERCENT) / 100)
-@@ -195,10 +196,13 @@
- 			 * bindings is in low latency. For this case, allocate
+@@ -195,10 +196,12 @@
  			 * the minimal required quota for the low latency
  			 * binding.
  			 */

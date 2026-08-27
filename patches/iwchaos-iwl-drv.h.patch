@@ -1,5 +1,5 @@
---- vendor/iwlwifi/iwl-drv.h	2026-08-26 18:21:09.815522986 -0500
-+++ vendor.clean/iwlwifi/iwl-drv.h	2026-08-26 18:20:31.843828712 -0500
+--- vendor/iwlwifi/iwl-drv.h
++++ vendor/iwlwifi/iwl-drv.h
 @@ -91,7 +91,9 @@
   * must be exported for the sub-modules. However, if it's not split and
   * everything is built-in, then we can avoid that.

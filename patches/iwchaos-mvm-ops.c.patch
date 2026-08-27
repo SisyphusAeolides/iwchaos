@@ -1,5 +1,5 @@
---- vendor/iwlwifi/mvm/ops.c	2026-08-26 18:21:15.966074494 -0500
-+++ vendor.clean/iwlwifi/mvm/ops.c	2026-08-26 18:20:39.893876468 -0500
+--- vendor/iwlwifi/mvm/ops.c
++++ vendor/iwlwifi/mvm/ops.c
 @@ -31,10 +31,7 @@
  #include "fw/uefi.h"
  #include "time-sync.h"
