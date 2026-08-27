@@ -5,24 +5,22 @@
  #include "iwl-debug.h"
  #include "mvm.h"
 +#include "iwchaos_chaos.h"
+ #include "iwl-modparams.h"
+ #include "fw/api/power.h"
  
- #define POWER_KEEP_ALIVE_PERIOD_SEC	10
- 
-@@ -408,8 +409,14 @@
- 		cmd->rx_data_timeout =
+@@ -409,9 +410,13 @@
  			cpu_to_le32(IWL_MVM_SHORT_PS_RX_DATA_TIMEOUT);
  	} else {
--		cmd->rx_data_timeout =
+ 		cmd->rx_data_timeout =
 -			cpu_to_le32(IWL_MVM_DEFAULT_PS_RX_DATA_TIMEOUT);
--		cmd->tx_data_timeout =
--			cpu_to_le32(IWL_MVM_DEFAULT_PS_TX_DATA_TIMEOUT);
-+		cmd->rx_data_timeout =
 +			cpu_to_le32(iwchaos_chaos_power_timeout_us(
 +				IWCHAOS_CTX_GLOBAL,
 +				IWL_MVM_DEFAULT_PS_RX_DATA_TIMEOUT));
-+		cmd->tx_data_timeout =
+ 		cmd->tx_data_timeout =
+-			cpu_to_le32(IWL_MVM_DEFAULT_PS_TX_DATA_TIMEOUT);
 +			cpu_to_le32(iwchaos_chaos_power_timeout_us(
 +				IWCHAOS_CTX_GLOBAL,
 +				IWL_MVM_DEFAULT_PS_TX_DATA_TIMEOUT));
  	}
  
+ 	if (iwl_mvm_power_allow_uapsd(mvm, vif))
