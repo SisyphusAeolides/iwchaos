@@ -230,12 +230,18 @@ check-agda:
 # ───────────────────────────────────────────────────────────────────────────
 # Combined check target
 # ───────────────────────────────────────────────────────────────────────────
-.PHONY: verify
+.PHONY: verify benchmark
 verify:
 	./scripts/verify.sh
 
+benchmark:
+	chmod +x scripts/benchmark.sh
+	./scripts/benchmark.sh
+
 .PHONY: check
 check: test-fortran
+	@echo "Running chaos-math tests..."
+	@cd chaos-math && $(CARGO) test
 	@echo "Running iwchaos-chaos tests..."
 	@cd iwchaos-chaos && $(CARGO) test
 	@if command -v idris2 >/dev/null; then $(MAKE) check-idris; else echo "SKIP: idris2 not installed"; fi

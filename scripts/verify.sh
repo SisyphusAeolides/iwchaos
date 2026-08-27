@@ -28,7 +28,7 @@ echo "--- chaos symbols ---"
 for sym in iwchaos_chaos_rate_select iwchaos_chaos_scan_iter_count \
 	   iwchaos_chaos_power_timeout_us iwchaos_chaos_coex_agg_limit \
 	   iwchaos_chaos_quota_adjust iwchaos_chaos_thermal_backoff_us \
-	   iwchaos_chaos_agg_time_limit; do
+	   iwchaos_chaos_agg_time_limit iwchaos_chaos_sta_release; do
 	if grep -Fq "${sym}" < <(nm "$ROOT/iwchaos.ko" 2>/dev/null); then
 		ok "symbol $sym"
 	else
@@ -44,6 +44,12 @@ for f in mvm/rs.c mvm/scan.c mvm/power.c mvm/coex.c mvm/quota.c mvm/tt.c; do
 		fail "no iwchaos hook in $f"
 	fi
 done
+
+if grep -q iwchaos_chaos_sta_release vendor/iwlwifi/mvm/rs.c; then
+	ok "rs_free_sta release hook"
+else
+	fail "rs_free_sta release hook missing"
+fi
 
 echo "--- patches ---"
 for p in patches/iwchaos-*.patch; do

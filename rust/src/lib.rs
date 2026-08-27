@@ -25,8 +25,14 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
 pub const IWCHAOS_STA_MAX: usize = 32;
 const TICK_CADENCE: u32 = 8;
+const OWNER_FREE: u8 = 0xff;
+const OWNER_GLOBAL: u8 = 0xfe;
+const SLOT_GLOBAL: usize = 0;
+const SLOT_STA_BASE: usize = 1;
+const SLOT_BINDING_BASE: usize = 28;
 
 struct IwChaosSta {
+    owner: u8,
     active: bool,
     lorenz: LorenzState,
     rossler: RosslerState,
@@ -53,6 +59,7 @@ static TICK_GEN: AtomicU32 = AtomicU32::new(0);
 impl IwChaosSta {
     const fn empty() -> Self {
         Self {
+            owner: OWNER_FREE,
             active: false,
             lorenz: LorenzState {
                 x: 0.1,
@@ -101,7 +108,9 @@ impl IwChaosSta {
 
     fn ensure_active(&mut self) {
         if !self.active {
+            let owner = self.owner;
             *self = Self::empty();
+            self.owner = owner;
             self.active = true;
         }
     }
@@ -246,16 +255,72 @@ impl IwChaosSta {
     }
 }
 
-fn sta_index(sta_id: u8) -> usize {
-    (sta_id as usize) % IWCHAOS_STA_MAX
+unsafe fn alloc_sta_slot(sta_id: u8) -> usize {
+    for i in SLOT_STA_BASE..SLOT_BINDING_BASE {
+        if STA_TABLE.slots[i].owner == sta_id {
+            return i;
+        }
+    }
+    for i in SLOT_STA_BASE..SLOT_BINDING_BASE {
+        if STA_TABLE.slots[i].owner == OWNER_FREE {
+            let slot = &mut STA_TABLE.slots[i];
+            *slot = IwChaosSta::empty();
+            slot.owner = sta_id;
+            slot.active = true;
+            return i;
+        }
+    }
+    let i = SLOT_STA_BASE + (sta_id as usize % (SLOT_BINDING_BASE - SLOT_STA_BASE));
+    let slot = &mut STA_TABLE.slots[i];
+    *slot = IwChaosSta::empty();
+    slot.owner = sta_id;
+    slot.active = true;
+    i
+}
+
+fn with_global<R>(f: impl FnOnce(&mut IwChaosSta) -> R) -> R {
+    unsafe {
+        let slot = &mut STA_TABLE.slots[SLOT_GLOBAL];
+        if slot.owner != OWNER_GLOBAL {
+            *slot = IwChaosSta::empty();
+            slot.owner = OWNER_GLOBAL;
+            slot.active = true;
+        }
+        f(slot)
+    }
 }
 
 fn with_sta<R>(sta_id: u8, f: impl FnOnce(&mut IwChaosSta) -> R) -> R {
-    let idx = sta_index(sta_id);
+    let idx = unsafe { alloc_sta_slot(sta_id) };
     unsafe {
         let slot = &mut STA_TABLE.slots[idx];
         slot.ensure_active();
         f(slot)
+    }
+}
+
+fn with_binding<R>(binding: u8, f: impl FnOnce(&mut IwChaosSta) -> R) -> R {
+    let idx = SLOT_BINDING_BASE + (binding as usize % (IWCHAOS_STA_MAX - SLOT_BINDING_BASE));
+    unsafe {
+        let slot = &mut STA_TABLE.slots[idx];
+        if slot.owner != binding {
+            *slot = IwChaosSta::empty();
+            slot.owner = binding;
+            slot.active = true;
+        } else {
+            slot.ensure_active();
+        }
+        f(slot)
+    }
+}
+
+fn release_sta(sta_id: u8) {
+    unsafe {
+        for i in SLOT_STA_BASE..SLOT_BINDING_BASE {
+            if STA_TABLE.slots[i].owner == sta_id {
+                STA_TABLE.slots[i] = IwChaosSta::empty();
+            }
+        }
     }
 }
 
@@ -284,6 +349,11 @@ pub extern "C" fn iwchaos_chaos_tx_feedback_rust(
 }
 
 #[no_mangle]
+pub extern "C" fn iwchaos_chaos_sta_release_rust(sta_id: u8) {
+    release_sta(sta_id);
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn iwchaos_update_all(
     lorenz: *mut LorenzState,
     rossler: *mut RosslerState,
@@ -295,7 +365,7 @@ pub unsafe extern "C" fn iwchaos_update_all(
     out: *mut ChaosParams,
 ) {
     unsafe {
-        with_sta(0, |sta| {
+        with_global(|sta| {
             if !lorenz.is_null() {
                 sta.lorenz = *lorenz;
             }
@@ -343,26 +413,26 @@ pub extern "C" fn iwchaos_rust_tick_gen() -> u32 {
 
 #[no_mangle]
 pub extern "C" fn iwchaos_chaos_scan_iter_count_rust(
-    ctx: u8,
+    _ctx: u8,
     channel: u16,
     band_2ghz: u8,
 ) -> u16 {
-    with_sta(ctx, |sta| sta.scan_iter_count(channel, band_2ghz != 0))
+    with_global(|sta| sta.scan_iter_count(channel, band_2ghz != 0))
 }
 
 #[no_mangle]
-pub extern "C" fn iwchaos_chaos_scan_dwell_tu_rust(ctx: u8, base: u16) -> u16 {
-    with_sta(ctx, |sta| sta.scan_dwell_tu(base))
+pub extern "C" fn iwchaos_chaos_scan_dwell_tu_rust(_ctx: u8, base: u16) -> u16 {
+    with_global(|sta| sta.scan_dwell_tu(base))
 }
 
 #[no_mangle]
-pub extern "C" fn iwchaos_chaos_power_timeout_us_rust(ctx: u8, base: u32) -> u32 {
-    with_sta(ctx, |sta| sta.power_timeout_us(base))
+pub extern "C" fn iwchaos_chaos_power_timeout_us_rust(_ctx: u8, base: u32) -> u32 {
+    with_global(|sta| sta.power_timeout_us(base))
 }
 
 #[no_mangle]
-pub extern "C" fn iwchaos_chaos_thermal_backoff_us_rust(ctx: u8, base: u32) -> u32 {
-    with_sta(ctx, |sta| sta.thermal_backoff_us(base))
+pub extern "C" fn iwchaos_chaos_thermal_backoff_us_rust(_ctx: u8, base: u32) -> u32 {
+    with_global(|sta| sta.thermal_backoff_us(base))
 }
 
 #[no_mangle]
@@ -377,5 +447,5 @@ pub extern "C" fn iwchaos_chaos_agg_time_limit_rust(sta_id: u8, coex_limit: u16)
 
 #[no_mangle]
 pub extern "C" fn iwchaos_chaos_quota_adjust_rust(binding: u8, intel: u32) -> u32 {
-    with_sta(binding, |sta| sta.quota_adjust(intel))
+    with_binding(binding, |sta| sta.quota_adjust(intel))
 }

@@ -10,6 +10,7 @@
 extern void iwchaos_chaos_tick_rust(u8 sta_id);
 extern u8 iwchaos_chaos_rate_select_rust(u8 sta_id, u8 index, int low, int high);
 extern void iwchaos_chaos_tx_feedback_rust(u8 sta_id, int success, int snr_db);
+extern void iwchaos_chaos_sta_release_rust(u8 sta_id);
 extern u16 iwchaos_chaos_scan_iter_count_rust(u8 ctx, u16 channel, u8 band_2ghz);
 extern u16 iwchaos_chaos_scan_dwell_tu_rust(u8 ctx, u16 base);
 extern u32 iwchaos_chaos_power_timeout_us_rust(u8 ctx, u32 base);
@@ -39,6 +40,13 @@ void iwchaos_chaos_tx_feedback(u8 sta_id, int success, int snr_db)
 {
 	kernel_fpu_begin();
 	iwchaos_chaos_tx_feedback_rust(sta_id, success, snr_db);
+	kernel_fpu_end();
+}
+
+void iwchaos_chaos_sta_release(u8 sta_id)
+{
+	kernel_fpu_begin();
+	iwchaos_chaos_sta_release_rust(sta_id);
 	kernel_fpu_end();
 }
 

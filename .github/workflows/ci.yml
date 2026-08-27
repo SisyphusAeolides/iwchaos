@@ -31,6 +31,15 @@ jobs:
       - name: Run Fortran unit tests
         run: make test-fortran
 
+      - name: Run chaos-math tests
+        run: make -C chaos-math test
+
+      - name: Run userspace chaos tests
+        run: make -C iwchaos-chaos test
+
+      - name: Generate Idris firmware FSM C
+        run: make idris-gen
+
       - name: Check Agda invariants
         run: make check-agda
         env:
