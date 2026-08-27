@@ -15,6 +15,8 @@ extern u16 iwchaos_chaos_scan_dwell_tu_rust(u8 ctx, u16 base);
 extern u32 iwchaos_chaos_power_timeout_us_rust(u8 ctx, u32 base);
 extern u16 iwchaos_chaos_coex_agg_limit_rust(u8 sta_id, u16 intel);
 extern u32 iwchaos_chaos_quota_adjust_rust(u8 binding, u32 intel);
+extern u32 iwchaos_chaos_thermal_backoff_us_rust(u8 ctx, u32 base);
+extern u16 iwchaos_chaos_agg_time_limit_rust(u8 sta_id, u16 coex_limit);
 
 void iwchaos_chaos_tick(u8 sta_id)
 {
@@ -86,6 +88,26 @@ u32 iwchaos_chaos_quota_adjust(u8 binding, u32 intel_quota)
 
 	kernel_fpu_begin();
 	out = iwchaos_chaos_quota_adjust_rust(binding, intel_quota);
+	kernel_fpu_end();
+	return out;
+}
+
+u32 iwchaos_chaos_thermal_backoff_us(u8 ctx, u32 intel_backoff_us)
+{
+	u32 out;
+
+	kernel_fpu_begin();
+	out = iwchaos_chaos_thermal_backoff_us_rust(ctx, intel_backoff_us);
+	kernel_fpu_end();
+	return out;
+}
+
+u16 iwchaos_chaos_agg_time_limit(u8 sta_id, u16 coex_limit)
+{
+	u16 out;
+
+	kernel_fpu_begin();
+	out = iwchaos_chaos_agg_time_limit_rust(sta_id, coex_limit);
 	kernel_fpu_end();
 	return out;
 }

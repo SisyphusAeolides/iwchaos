@@ -18,4 +18,13 @@ u32 iwchaos_chaos_power_timeout_us(u8 ctx, u32 base_timeout_us);
 u16 iwchaos_chaos_coex_agg_limit(u8 sta_id, u16 intel_limit);
 u32 iwchaos_chaos_quota_adjust(u8 binding, u32 intel_quota);
 
+/* Phase C: Lorenz thermal/agg, shared chaos-math crate */
+u32 iwchaos_chaos_thermal_backoff_us(u8 ctx, u32 intel_backoff_us);
+u16 iwchaos_chaos_agg_time_limit(u8 sta_id, u16 coex_limit);
+
+/*
+ * Per-station table uses sta_id % IWCHAOS_STA_MAX (32 slots). Collisions
+ * share attractor state; use IWCHAOS_CTX_GLOBAL (0) for device-wide paths.
+ */
+
 #endif /* IWCHAOS_CHAOS_H */

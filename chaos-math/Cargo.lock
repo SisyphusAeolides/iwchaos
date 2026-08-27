@@ -5,10 +5,3 @@ version = 4
 [[package]]
 name = "chaos-math"
 version = "0.1.0"
-
-[[package]]
-name = "iwchaos-core"
-version = "0.1.0"
-dependencies = [
- "chaos-math",
-]

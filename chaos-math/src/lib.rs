@@ -1,9 +1,88 @@
 // SPDX-License-Identifier: GPL-2.0-only
-//! Freestanding chaos numerics for ring 0 (no libm / no Fortran).
+//! Shared freestanding chaos numerics (kernel + userspace).
 
-use super::{DuffingState, LogisticState, LorenzState, LyapunovState, RosslerState};
+#![no_std]
 
 const M_PI: f64 = core::f64::consts::PI;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct LorenzState {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct RosslerState {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct LyapunovState {
+    pub traj: LorenzState,
+    pub dx: f64,
+    pub dy: f64,
+    pub dz: f64,
+    pub sum: f64,
+    pub steps: u64,
+}
+
+impl Default for LyapunovState {
+    fn default() -> Self {
+        Self {
+            traj: LorenzState {
+                x: 0.1,
+                y: 0.1,
+                z: 0.1,
+            },
+            dx: 1.0,
+            dy: 0.0,
+            dz: 0.0,
+            sum: 0.0,
+            steps: 0,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct DuffingState {
+    pub x: f64,
+    pub y: f64,
+    pub t: f64,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct LogisticState {
+    pub x: f64,
+    pub r: f64,
+}
+
+impl Default for LogisticState {
+    fn default() -> Self {
+        Self { x: 0.3, r: 4.0 }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct ChaosParams {
+    pub backoff_us: u64,
+    pub power_state: u32,
+    pub snr_delta_centidecibels: i32,
+    pub channel_24ghz: u32,
+    pub channel_5ghz: u32,
+    pub tx_power_mw: u32,
+    pub jitter_us: u32,
+    pub adaptive_dt: f64,
+    pub lyapunov_est: f64,
+}
 
 #[inline]
 fn fabs(x: f64) -> f64 {
@@ -215,4 +294,21 @@ pub fn duffing_snr_delta_cd(s: &mut DuffingState) -> i32 {
     let db = clamp_f64(s.x, -2.0, 2.0) * 1.5;
     let val = db * 100.0;
     (val + if val < 0.0 { -0.5 } else { 0.5 }) as i32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lorenz_backoff_in_range() {
+        let mut s = LorenzState::default();
+        let us = lorenz_backoff_us(&mut s);
+        assert!((10..=1000).contains(&us));
+    }
+
+    #[test]
+    fn rossler_5ghz_mapping() {
+        assert_eq!(rossler_channel_5ghz(0.0), 36);
+    }
 }

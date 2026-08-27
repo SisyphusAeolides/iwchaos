@@ -4,14 +4,19 @@
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
 
-mod chaos_math;
-
 use chaos_math::{
     duffing_snr_delta_cd, logistic_jitter_us, lorenz_backoff_us, lyapunov_adaptive_dt,
-    lyapunov_est, lyapunov_step, mandelbrot_power, rossler_channels,
+    lyapunov_est, lyapunov_step, mandelbrot_power, rossler_channels, ChaosParams, DuffingState,
+    LogisticState, LorenzState, LyapunovState, RosslerState,
 };
 use core::ffi::c_int;
 use core::sync::atomic::{AtomicU32, Ordering};
+
+pub use chaos_math::{
+    ChaosParams as IwChaosParams, DuffingState as IwDuffingState,
+    LogisticState as IwLogisticState, LorenzState as IwLorenzState,
+    LyapunovState as IwLyapunovState, RosslerState as IwRosslerState,
+};
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
@@ -20,62 +25,6 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
 pub const IWCHAOS_STA_MAX: usize = 32;
 const TICK_CADENCE: u32 = 8;
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct LorenzState {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct RosslerState {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct LyapunovState {
-    pub traj: LorenzState,
-    pub dx: f64,
-    pub dy: f64,
-    pub dz: f64,
-    pub sum: f64,
-    pub steps: u64,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct DuffingState {
-    pub x: f64,
-    pub y: f64,
-    pub t: f64,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct LogisticState {
-    pub x: f64,
-    pub r: f64,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct ChaosParams {
-    pub backoff_us: u64,
-    pub power_state: u32,
-    pub snr_delta_centidecibels: i32,
-    pub channel_24ghz: u32,
-    pub channel_5ghz: u32,
-    pub tx_power_mw: u32,
-    pub jitter_us: u32,
-    pub adaptive_dt: f64,
-    pub lyapunov_est: f64,
-}
 
 struct IwChaosSta {
     active: bool,
@@ -221,10 +170,24 @@ impl IwChaosSta {
         base.saturating_add(self.params.backoff_us as u32)
     }
 
+    fn thermal_backoff_us(&mut self, intel: u32) -> u32 {
+        self.tick_hot();
+        intel
+            .saturating_add(self.params.backoff_us as u32)
+            .min(20_000)
+    }
+
     fn coex_agg_limit(&mut self, intel: u16) -> u16 {
         self.tick_hot();
         let jitter = self.params.jitter_us as u32;
         let scaled = intel as u32 * (80 + jitter * 40 / 100) / 100;
+        scaled.clamp(200, 8000) as u16
+    }
+
+    fn agg_time_limit(&mut self, coex_limit: u16) -> u16 {
+        self.tick_hot();
+        let lorenz = self.params.backoff_us as u32;
+        let scaled = coex_limit as u32 * (700 + lorenz) / 1000;
         scaled.clamp(200, 8000) as u16
     }
 
@@ -398,8 +361,18 @@ pub extern "C" fn iwchaos_chaos_power_timeout_us_rust(ctx: u8, base: u32) -> u32
 }
 
 #[no_mangle]
+pub extern "C" fn iwchaos_chaos_thermal_backoff_us_rust(ctx: u8, base: u32) -> u32 {
+    with_sta(ctx, |sta| sta.thermal_backoff_us(base))
+}
+
+#[no_mangle]
 pub extern "C" fn iwchaos_chaos_coex_agg_limit_rust(sta_id: u8, intel: u16) -> u16 {
     with_sta(sta_id, |sta| sta.coex_agg_limit(intel))
+}
+
+#[no_mangle]
+pub extern "C" fn iwchaos_chaos_agg_time_limit_rust(sta_id: u8, coex_limit: u16) -> u16 {
+    with_sta(sta_id, |sta| sta.agg_time_limit(coex_limit))
 }
 
 #[no_mangle]

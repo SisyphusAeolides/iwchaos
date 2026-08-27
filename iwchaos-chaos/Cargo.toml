@@ -15,5 +15,8 @@ categories = ["science", "simulation"]
 name = "iwchaos_chaos"
 path = "src/lib.rs"
 
+[dependencies]
+chaos-math = { path = "../chaos-math" }
+
 [dev-dependencies]
 approx = "0.5"

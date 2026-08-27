@@ -5,6 +5,9 @@ edition = "2021"
 license = "GPL-2.0-only"
 publish = false
 
+[dependencies]
+chaos-math = { path = "../chaos-math" }
+
 [lib]
 name = "iwchaos_core"
 crate-type = ["staticlib"]

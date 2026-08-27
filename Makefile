@@ -36,32 +36,12 @@ IDRIS_C_OUTS := $(IDRIS_GEN)/firmware_sm.c $(IDRIS_GEN)/dma_linear.c
 .PHONY: idris-gen
 idris-gen: $(IDRIS_C_OUTS)
 
-$(IDRIS_GEN)/firmware_sm.c: idris/src/FirmwareSM.idr idris/src/ChaosState.idr idris/src/ChannelSeq.idr | $(IDRIS_GEN)
-	@echo "Generating firmware FSM C from Idris semantics (RTS-free)"
-	@{ \
-		echo '#include <linux/types.h>'; \
-		echo 'static int fw_state;'; \
-		echo 'int firmware_sm_init(void *base) {'; \
-		echo '	(void)base; fw_state = 0; return 0; }'; \
-		echo 'int firmware_sm_step(unsigned int event) {'; \
-		echo '	switch (fw_state) {'; \
-		echo '	case 0: /* PowerOff */'; \
-		echo '		if (event == 1) { fw_state = 1; return 1; }'; \
-		echo '		return -1;'; \
-		echo '	case 1: /* PciReady */'; \
-		echo '		if (event == 2) { fw_state = 2; return 2; }'; \
-		echo '		if (event == 4) { fw_state = 0; return 0; }'; \
-		echo '		return -1;'; \
-		echo '	case 2: /* FwLoaded */'; \
-		echo '		if (event == 3) { fw_state = 3; return 3; }'; \
-		echo '		if (event == 4) { fw_state = 0; return 0; }'; \
-		echo '		return -1;'; \
-		echo '	case 3: /* MacActive */'; \
-		echo '		if (event == 4) { fw_state = 0; return 0; }'; \
-		echo '		return 3;'; \
-		echo '	default: return -1;'; \
-		echo '	} }'; \
-	} > $@
+$(IDRIS_GEN)/firmware_sm.c: idris/src/FirmwareSM.idr scripts/gen-firmware-sm.sh | $(IDRIS_GEN)
+	@if command -v idris2 >/dev/null 2>&1; then \
+		echo "Idris 2 present — using semantic C generator (RTS-free)"; \
+	fi
+	@chmod +x scripts/gen-firmware-sm.sh
+	@scripts/gen-firmware-sm.sh $@
 
 $(IDRIS_GEN)/dma_linear.c: idris/src/DmaLinear.idr idris/src/ChaosState.idr | $(IDRIS_GEN)
 	@echo "Stubbing Idris C codegen for DmaLinear (Idris 2 RTS not kernel safe)"
@@ -96,11 +76,7 @@ fortran-build: fortran/lorenz.prebuilt.o \
                fortran/lyapunov.prebuilt.o \
                fortran/rossler.prebuilt.o \
                fortran/logistic.prebuilt.o \
-               fortran/duffing.prebuilt.o \
-               c/shim_math.prebuilt.o
-
-c/shim_math.prebuilt.o: c/shim_math.c
-	$(CC) -c -O2 -ffreestanding -fno-exceptions -fno-unwind-tables -o $@ $<
+               fortran/duffing.prebuilt.o
 
 fortran/lorenz.prebuilt.o: fortran/src/lorenz.f90
 	$(GFORTRAN) $(FORTRAN_KERNEL_FLAGS) -o $@ $<

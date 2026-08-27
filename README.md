@@ -11,6 +11,7 @@ shims, and the vendored Intel transport.
 | Module entry + FPU guards | C (thin) | `module_init`, `kernel_fpu_*`, chaos ABI |
 | Intel transport + MVM | C (vendored) | PCIe, firmware, mac80211, LEDs |
 | Chaos policy + numerics | Rust (`rust/` staticlib) | Per-sta rate control, attractors, SNR feedback |
+| Shared attractor math | Rust (`chaos-math/`) | Single source for kernel + userspace |
 | Chaos numerics (userspace) | Rust crate [`iwchaos-chaos`](iwchaos-chaos/) | Simulation / tests |
 | Fortran (offline only) | Fortran | `make test-fortran` unit tests |
 | Firmware FSM | Idris 2 | Type-checked state machine (stub C for ring 0) |
