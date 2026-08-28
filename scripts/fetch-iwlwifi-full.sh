@@ -14,7 +14,7 @@ mapfile -t PATHS < <(curl -sL "https://api.github.com/repos/torvalds/linux/git/t
 	| python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-skip = ('/tests/', '/kunit/', '/dvm/', '/mld/', '/mei/')
+skip = ('/tests/', '/kunit/', '/mld/', '/mei/')
 for t in d['tree']:
     p = t['path']
     if not p.startswith('drivers/net/wireless/intel/iwlwifi/'):
