@@ -2,15 +2,12 @@
 #
 # iwchaos — complete iwlwifi + iwlmvm replacement (single module)
 #
-
 obj-$(CONFIG_IWCHAOS) += iwchaos.o
-
 IWL := vendor/iwlwifi
 MVM := $(IWL)/mvm
 PCIE := $(IWL)/pcie
 CFG := $(IWL)/cfg
 FW := $(IWL)/fw
-
 iwchaos-y := \
 	$(IWL)/iwl-io.o \
 	$(IWL)/iwl-drv.o \
@@ -46,8 +43,6 @@ iwchaos-y := \
 	$(CFG)/rf-fm.o \
 	$(CFG)/rf-wh.o \
 	$(CFG)/rf-pe.o \
-	
-	
 	$(IWL)/iwl-trans.o \
 	$(FW)/img.o \
 	$(FW)/notif-wait.o \
@@ -105,11 +100,8 @@ iwchaos-y := \
 	idris/generated/firmware_sm.o \
 	idris/generated/dma_linear.o \
 	rust/libiwchaos_core.prebuilt.o
-
 CFLAGS_vendor/iwlwifi/pcie/drv.o := -Wno-override-init
-
 OBJECT_FILES_NON_STANDARD_rust/libiwchaos_core.prebuilt.o := y
-
 ccflags-y := -I$(src)/include \
              -I$(src)/vendor/iwlwifi \
              -I$(src)/vendor/iwlwifi/mvm \
@@ -123,4 +115,3 @@ ccflags-y := -I$(src)/include \
              -DCONFIG_PM_SLEEP \
              -DCONFIG_ACPI \
              -DCONFIG_EFI \
-             
