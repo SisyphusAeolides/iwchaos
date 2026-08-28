@@ -1,9 +1,12 @@
 [package]
 name = "chaos-math"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "GPL-2.0-only"
-publish = false
+description = "Freestanding chaos-theory numerics shared by iwchaos"
+repository = "https://github.com/SisyphusAeolides/iwchaos"
+keywords = ["chaos", "lorenz", "rossler", "duffing"]
+categories = ["science", "simulation", "no-std"]
 
 [lib]
 path = "src/lib.rs"
