@@ -97,6 +97,7 @@ iwchaos-y := \
 	$(MVM)/d3.o \
 	c/shim_module.o \
 	c/shim_chaos.o \
+	c/shim_stubs.o \
 	idris/generated/firmware_sm.o \
 	idris/generated/dma_linear.o \
 	rust/libiwchaos_core.prebuilt.o
