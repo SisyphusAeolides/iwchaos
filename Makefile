@@ -151,13 +151,13 @@ modules: idris-gen rust-build vendor prebuilt-cmd
 	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) \
 		CONFIG_IWCHAOS=m \
 		CONFIG_DEBUG_INFO_BTF_MODULES=n \
-		LLVM=1 \
+		\
 		modules
 
 .PHONY: modules_install
 modules_install: modules
 	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) CONFIG_IWCHAOS=m \
-		CONFIG_DEBUG_INFO_BTF_MODULES=n LLVM=1 modules_install
+		CONFIG_DEBUG_INFO_BTF_MODULES=n modules_install
 	depmod -a
 
 .PHONY: install-firmware
