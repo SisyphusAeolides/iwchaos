@@ -46,8 +46,8 @@ iwchaos-y := \
 	$(CFG)/rf-fm.o \
 	$(CFG)/rf-wh.o \
 	$(CFG)/rf-pe.o \
-	$(IWL)/iwl-dbg-tlv.o \
-	$(IWL)/iwl-devtrace.o \
+	
+	
 	$(IWL)/iwl-trans.o \
 	$(FW)/img.o \
 	$(FW)/notif-wait.o \
@@ -117,10 +117,10 @@ ccflags-y := -I$(src)/include \
              -DCONFIG_IWLMVM \
              -DCONFIG_IWLWIFI \
              -DIWCHAOS_MONOLITHIC \
-             -DCONFIG_IWLWIFI_DEBUGFS \
+             FS \
              -DCONFIG_IWLWIFI_LEDS \
              -DCONFIG_MAC80211_LEDS \
              -DCONFIG_PM_SLEEP \
              -DCONFIG_ACPI \
              -DCONFIG_EFI \
-             -DCONFIG_IWLWIFI_DEBUG
+             
