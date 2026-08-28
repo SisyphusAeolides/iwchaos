@@ -8,6 +8,7 @@ URL:            https://github.com/SisyphusAeolides/iwchaos
 VCS:            {{{ git_dir_vcs }}}
 Source:         {{{ git_dir_pack }}}
 
+BuildRequires:  rsync
 Requires:       dkms
 Requires:       rust
 Requires:       cargo
