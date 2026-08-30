@@ -1,5 +1,5 @@
 Name:           iwchaos
-Version:        0.2.2
+Version:        0.2.3
 Release:        1%{?dist}
 Summary:        Target-kernel Intel Wi-Fi modules with a bounded rate policy
 
@@ -53,7 +53,7 @@ if command -v dkms >/dev/null 2>&1; then
   # A manually pre-registered tree may already contain this exact version.
   # Do not turn that harmless state into an upgrade error; autoinstall still
   # rebuilds any missing target-kernel module and leaves loaded modules alone.
-  if ! dkms status -m %{name} -v %{version} >/dev/null 2>&1; then
+  if [ ! -f "/var/lib/dkms/%{name}/%{version}/source/dkms.conf" ]; then
     dkms add -m %{name} -v %{version} --rpm_safe_upgrade || :
   fi
   dkms autoinstall -m %{name} -v %{version} || :
@@ -69,6 +69,9 @@ fi
 /usr/share/licenses/%{name}/LICENSE
 
 %changelog
+* Sun Aug 30 2026 Sisyphus Aeolides <SisyphusAeolides@pm.me> - 0.2.3-1
+- Detect registered DKMS versions by their source metadata before adding
+
 * Sun Aug 30 2026 Sisyphus Aeolides <SisyphusAeolides@pm.me> - 0.2.2-1
 - Make DKMS upgrades idempotent when the target version is already registered
 
