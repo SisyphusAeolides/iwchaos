@@ -1,5 +1,5 @@
 Name:           iwchaos
-Version:        0.2.0
+Version:        0.2.1
 Release:        1%{?dist}
 Summary:        Target-kernel Intel Wi-Fi modules with a bounded rate policy
 
@@ -63,6 +63,7 @@ fi
 /usr/share/licenses/%{name}/LICENSE
 
 %changelog
-* Sat Aug 29 2026 Sisyphus Aeolides <SisyphusAeolides@pm.me> - 0.2.0-1
+* Sat Aug 29 2026 Sisyphus Aeolides <SisyphusAeolides@pm.me> - 0.2.1-1
 - Build target-kernel iwlwifi modules with DKMS
 - Remove the monolithic replacement and fake firmware paths
+- Create the build-time source directory before DKMS fetches iwlwifi

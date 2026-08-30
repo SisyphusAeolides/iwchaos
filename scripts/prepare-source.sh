@@ -39,6 +39,7 @@ if [[ -f "${SOURCE_DIR}/.iwchaos-source" ]]; then
 	fi
 fi
 
+mkdir -p "${ROOT}/vendor"
 STAGE_ROOT="$(mktemp -d "${ROOT}/vendor/.iwlwifi-stage.XXXXXX")"
 FETCH_ROOT=""
 cleanup() {
