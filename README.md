@@ -46,8 +46,8 @@ the target kernel's iwlwifi source when the kernel-devel package contains no
 full source tree:
 
 ```sh
-sudo dkms add -m iwchaos -v 0.2.1
-sudo dkms install -m iwchaos -v 0.2.1 -k "$(uname -r)"
+sudo dkms add -m iwchaos -v 0.2.4
+sudo dkms install -m iwchaos -v 0.2.4 -k "$(uname -r)" --force
 sudo depmod -a "$(uname -r)"
 ```
 
@@ -56,7 +56,7 @@ modules for that kernel. To remove this version and return to the distribution
 modules:
 
 ```sh
-sudo dkms remove -m iwchaos -v 0.2.1 --all
+sudo dkms remove -m iwchaos -v 0.2.4 --all
 sudo depmod -a
 ```
 
