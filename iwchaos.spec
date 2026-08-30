@@ -40,6 +40,7 @@ firmware interface remain authoritative.
 %install
 mkdir -p %{buildroot}/usr/src/%{name}-%{version}
 cp -a . %{buildroot}/usr/src/%{name}-%{version}/
+install -Dm644 LICENSE %{buildroot}/usr/share/licenses/%{name}/LICENSE
 rm -rf %{buildroot}/usr/src/%{name}-%{version}/.git
 rm -rf %{buildroot}/usr/src/%{name}-%{version}/vendor
 rm -rf %{buildroot}/usr/src/%{name}-%{version}/rust/target
