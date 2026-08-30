@@ -1,6 +1,6 @@
 [package]
 name = "iwchaos-chaos"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.70"
 license = "GPL-2.0-or-later"
@@ -16,7 +16,7 @@ name = "iwchaos_chaos"
 path = "src/lib.rs"
 
 [dependencies]
-chaos-math = { version = "0.1.1", path = "../chaos-math" }
+chaos-math = { version = "0.2.0", path = "../chaos-math" }
 
 [dev-dependencies]
 approx = "0.5"

@@ -1,62 +1,68 @@
 Name:           iwchaos
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
-Summary:        Drop-in replacement for Linux iwlwifi + iwlmvm with chaos-theory rate-control layer
+Summary:        Target-kernel Intel Wi-Fi modules with a bounded rate policy
 
 License:        GPL-2.0-only
 URL:            https://github.com/SisyphusAeolides/iwchaos
-VCS:            {{{ git_dir_vcs }}}
-Source:         {{{ git_dir_pack }}}
+Source0:        https://github.com/SisyphusAeolides/iwchaos/archive/refs/tags/v%{version}.tar.gz
 
-BuildRequires:  rsync
-Requires:       dkms
-Requires:       rust
+BuildRequires:  binutils
+BuildRequires:  cargo
+BuildRequires:  gcc
+BuildRequires:  git
+BuildRequires:  make
+BuildRequires:  python3
+BuildRequires:  rust
+
+Requires:       binutils
 Requires:       cargo
-Requires:       idris2
+Requires:       curl
+Requires:       dkms
 Requires:       gcc
+Requires:       git
 Requires:       make
-Requires:       rsync
-Requires:       wget
-Requires:       kernel-devel
-Requires:       clang
-Requires:       llvm
+Requires:       python3
+Requires:       rust
 
 BuildArch:      noarch
 
 %description
-Drop-in replacement for Linux iwlwifi + iwlmvm on Intel AX200/AX201, with a
-chaos-theory rate-control layer.
+Target-kernel-compatible Intel iwlwifi, iwlmvm, and iwldvm DKMS modules with a
+small bounded fixed-point rate-policy advisory. The upstream transport and
+firmware interface remain authoritative.
 
 %prep
-{{{ git_dir_setup_macro }}}
+%autosetup -n %{name}-%{version}
 
 %build
 
 %install
 mkdir -p %{buildroot}/usr/src/%{name}-%{version}
-rsync -a --exclude='.git' . %{buildroot}/usr/src/%{name}-%{version}/
-
-# Install firmware
-mkdir -p %{buildroot}/lib/firmware
-install -m 0644 firmware/iwchaos-firmware.ucode %{buildroot}/lib/firmware/
-
-# Install modprobe.d
-mkdir -p %{buildroot}/etc/modprobe.d
-install -m 0644 modprobe.d/iwchaos.conf %{buildroot}/etc/modprobe.d/
+cp -a . %{buildroot}/usr/src/%{name}-%{version}/
+rm -rf %{buildroot}/usr/src/%{name}-%{version}/.git
+rm -rf %{buildroot}/usr/src/%{name}-%{version}/vendor
+rm -rf %{buildroot}/usr/src/%{name}-%{version}/rust/target
+rm -rf %{buildroot}/usr/src/%{name}-%{version}/rust/.ar-extract
+find %{buildroot}/usr/src/%{name}-%{version} -type f \
+  \( -name '*.o' -o -name '*.ko' -o -name '*.cmd' -o -name '*.d' \) -delete
 
 %post
-dkms add -m %{name} -v %{version} --rpm_safe_upgrade || :
-dkms build -m %{name} -v %{version} || :
-dkms install -m %{name} -v %{version} || :
+if command -v dkms >/dev/null 2>&1; then
+  dkms add -m %{name} -v %{version} --rpm_safe_upgrade || :
+  dkms autoinstall -m %{name} -v %{version} || :
+fi
 
 %preun
-dkms remove -m %{name} -v %{version} --all --rpm_safe_upgrade || :
+if [ "$1" -eq 0 ] && command -v dkms >/dev/null 2>&1; then
+  dkms remove -m %{name} -v %{version} --all --rpm_safe_upgrade || :
+fi
 
 %files
 /usr/src/%{name}-%{version}/
-/lib/firmware/iwchaos-firmware.ucode
-/etc/modprobe.d/iwchaos.conf
+/usr/share/licenses/%{name}/LICENSE
 
 %changelog
-* Thu Aug 27 2026 Sisyphus Aeolides <SisyphusAeolides@pm.me> - 0.1.0-1
-- Initial release
+* Sat Aug 29 2026 Sisyphus Aeolides <SisyphusAeolides@pm.me> - 0.2.0-1
+- Build target-kernel iwlwifi modules with DKMS
+- Remove the monolithic replacement and fake firmware paths

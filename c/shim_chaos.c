@@ -1,121 +1,76 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * iwchaos — per-sta chaos hooks for vendored MVM (rs/tx) → Rust staticlib.
+ * iwchaos — bounded rate policy bridge for the target kernel's MVM module.
  */
 
 #include <linux/kernel.h>
-#include <asm/fpu/api.h>
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/spinlock.h>
+
 #include "iwchaos_chaos.h"
 
-extern void iwchaos_chaos_tick_rust(u8 sta_id);
 extern u8 iwchaos_chaos_rate_select_rust(u8 sta_id, u8 index, int low, int high);
 extern void iwchaos_chaos_tx_feedback_rust(u8 sta_id, int success, int snr_db);
 extern void iwchaos_chaos_sta_release_rust(u8 sta_id);
-extern u16 iwchaos_chaos_scan_iter_count_rust(u8 ctx, u16 channel, u8 band_2ghz);
-extern u16 iwchaos_chaos_scan_dwell_tu_rust(u8 ctx, u16 base);
-extern u32 iwchaos_chaos_power_timeout_us_rust(u8 ctx, u32 base);
-extern u16 iwchaos_chaos_coex_agg_limit_rust(u8 sta_id, u16 intel);
-extern u32 iwchaos_chaos_quota_adjust_rust(u8 binding, u32 intel);
-extern u32 iwchaos_chaos_thermal_backoff_us_rust(u8 ctx, u32 base);
-extern u16 iwchaos_chaos_agg_time_limit_rust(u8 sta_id, u16 coex_limit);
 
-void iwchaos_chaos_tick(u8 sta_id)
-{
-	kernel_fpu_begin();
-	iwchaos_chaos_tick_rust(sta_id);
-	kernel_fpu_end();
-}
+static DEFINE_SPINLOCK(iwchaos_state_lock);
+static bool iwchaos_enabled = true;
+
+module_param_named(iwchaos, iwchaos_enabled, bool, 0644);
+MODULE_PARM_DESC(iwchaos,
+		 "enable the bounded iwchaos rate policy (default: true)");
 
 u8 iwchaos_chaos_rate_select(u8 sta_id, u8 index, int low, int high)
 {
+	unsigned long flags;
 	u8 out;
 
-	kernel_fpu_begin();
+	if (!READ_ONCE(iwchaos_enabled))
+		return index;
+
+	spin_lock_irqsave(&iwchaos_state_lock, flags);
 	out = iwchaos_chaos_rate_select_rust(sta_id, index, low, high);
-	kernel_fpu_end();
+	spin_unlock_irqrestore(&iwchaos_state_lock, flags);
+
 	return out;
 }
+EXPORT_SYMBOL_GPL(iwchaos_chaos_rate_select);
 
 void iwchaos_chaos_tx_feedback(u8 sta_id, int success, int snr_db)
 {
-	kernel_fpu_begin();
+	unsigned long flags;
+
+	if (!READ_ONCE(iwchaos_enabled))
+		return;
+
+	spin_lock_irqsave(&iwchaos_state_lock, flags);
 	iwchaos_chaos_tx_feedback_rust(sta_id, success, snr_db);
-	kernel_fpu_end();
+	spin_unlock_irqrestore(&iwchaos_state_lock, flags);
 }
+EXPORT_SYMBOL_GPL(iwchaos_chaos_tx_feedback);
 
 void iwchaos_chaos_sta_release(u8 sta_id)
 {
-	kernel_fpu_begin();
+	unsigned long flags;
+
+	spin_lock_irqsave(&iwchaos_state_lock, flags);
 	iwchaos_chaos_sta_release_rust(sta_id);
-	kernel_fpu_end();
+	spin_unlock_irqrestore(&iwchaos_state_lock, flags);
 }
+EXPORT_SYMBOL_GPL(iwchaos_chaos_sta_release);
 
-u16 iwchaos_chaos_scan_iter_count(u8 ctx, u16 channel, bool band_2ghz)
+static int __init iwchaos_policy_init(void)
 {
-	u16 out;
-
-	kernel_fpu_begin();
-	out = iwchaos_chaos_scan_iter_count_rust(ctx, channel, band_2ghz);
-	kernel_fpu_end();
-	return out;
+	return 0;
 }
 
-u16 iwchaos_chaos_scan_dwell_tu(u8 ctx, u16 base_dwell_tu)
+static void __exit iwchaos_policy_exit(void)
 {
-	u16 out;
-
-	kernel_fpu_begin();
-	out = iwchaos_chaos_scan_dwell_tu_rust(ctx, base_dwell_tu);
-	kernel_fpu_end();
-	return out;
 }
 
-u32 iwchaos_chaos_power_timeout_us(u8 ctx, u32 base_timeout_us)
-{
-	u32 out;
+module_init(iwchaos_policy_init);
+module_exit(iwchaos_policy_exit);
 
-	kernel_fpu_begin();
-	out = iwchaos_chaos_power_timeout_us_rust(ctx, base_timeout_us);
-	kernel_fpu_end();
-	return out;
-}
-
-u16 iwchaos_chaos_coex_agg_limit(u8 sta_id, u16 intel_limit)
-{
-	u16 out;
-
-	kernel_fpu_begin();
-	out = iwchaos_chaos_coex_agg_limit_rust(sta_id, intel_limit);
-	kernel_fpu_end();
-	return out;
-}
-
-u32 iwchaos_chaos_quota_adjust(u8 binding, u32 intel_quota)
-{
-	u32 out;
-
-	kernel_fpu_begin();
-	out = iwchaos_chaos_quota_adjust_rust(binding, intel_quota);
-	kernel_fpu_end();
-	return out;
-}
-
-u32 iwchaos_chaos_thermal_backoff_us(u8 ctx, u32 intel_backoff_us)
-{
-	u32 out;
-
-	kernel_fpu_begin();
-	out = iwchaos_chaos_thermal_backoff_us_rust(ctx, intel_backoff_us);
-	kernel_fpu_end();
-	return out;
-}
-
-u16 iwchaos_chaos_agg_time_limit(u8 sta_id, u16 coex_limit)
-{
-	u16 out;
-
-	kernel_fpu_begin();
-	out = iwchaos_chaos_agg_time_limit_rust(sta_id, coex_limit);
-	kernel_fpu_end();
-	return out;
-}
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Bounded fixed-point iwchaos policy bridge");

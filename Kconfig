@@ -1,18 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 config IWCHAOS
-	tristate "iwchaos: chaos-driven Intel Wi-Fi 6 driver (AX200/AX201)"
+	tristate "iwchaos: bounded Intel Wi-Fi rate policy"
 	depends on PCI && MAC80211 && CFG80211
 	help
-	  A memory-safe, formally verified replacement for iwlwifi targeting
-	  Intel Wi-Fi 6 AX200/AX201 on the Lenovo ThinkPad P53.
-
-	  The driver core is written in Rust (freestanding staticlib), with a Fortran
-	  chaos engine for MAC backoff and power management, an Idris 2 firmware
-	  firmware state machine with linear DMA ticket types, and Agda offline
-	  invariant proofs.
-
-	  To compile as a loadable module, say M. The module will be called
-	  iwchaos.ko.
+	  Enables the optional iwchaos policy bridge when the target-kernel
+	  iwlmvm source is integrated by the external DKMS build. The upstream
+	  iwlwifi, iwlmvm, and iwldvm modules remain the driver modules.
 
 	  If unsure, say N.

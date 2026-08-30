@@ -69,6 +69,9 @@ impl ChaosEngine {
 
     pub fn rate_select(&mut self, hint: u8, low: u8, high: u8) -> u8 {
         self.tick();
+        if low > high {
+            return hint;
+        }
         let cp = &self.params;
         let span = (high - low) as u32 + 1;
         if span == 0 {
@@ -123,5 +126,11 @@ mod tests {
         let mut e = ChaosEngine::default();
         let idx = e.rate_select(5, 2, 8);
         assert!((2..=8).contains(&idx));
+    }
+
+    #[test]
+    fn invalid_rate_bounds_preserve_hint() {
+        let mut e = ChaosEngine::default();
+        assert_eq!(e.rate_select(7, 8, 2), 7);
     }
 }

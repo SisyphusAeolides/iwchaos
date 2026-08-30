@@ -1,12 +1,9 @@
 [package]
 name = "iwchaos-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "GPL-2.0-only"
 publish = false
-
-[dependencies]
-chaos-math = { path = "../chaos-math" }
 
 [lib]
 name = "iwchaos_core"

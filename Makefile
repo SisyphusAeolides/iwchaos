@@ -1,265 +1,119 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# iwchaos top-level Makefile
+# Target-kernel build for iwchaos.
 #
-# Four-phase build:
-#   Phase 1 — Idris 2  → verified C in idris/generated/
-#   Phase 2 — Fortran  → freestanding .prebuilt.o in fortran/
-#   Phase 3 — Cargo    → no_std staticlib rust/libiwchaos_core.a
-#   Phase 4 — Kbuild   → final link of iwchaos.ko
-#
-# Usage:
-#   make          — build all phases + kernel module
-#   make check    — type-check Idris + run Fortran unit tests
-#   make clean    — remove all build artifacts
-#
+# The Intel driver is built as the normal iwlwifi/iwlmvm/iwldvm modules.  The
+# source is selected for the kernel being built, so one DKMS registration can
+# be rebuilt for multiple kernels without carrying a stale vendor tree.
 
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
-MODULE_DIR  := $(shell pwd)
+KERNELRELEASE ?= $(shell make -s -C "$(KERNEL_SRC)" kernelversion 2>/dev/null)
+IWCHAOS_SOURCE_DIR := $(ROOT)/vendor/iwlwifi-$(KERNELRELEASE)
 
-# ── Toolchain ──────────────────────────────────────────────────────────────
-IDRIS2    ?= idris2
-GFORTRAN  ?= gfortran
-CARGO     ?= cargo
-
-# ── Architecture ───────────────────────────────────────────────────────────
-RUST_TARGET := x86_64-unknown-none
-FORTRAN_MODDIR := fortran
-
-# ───────────────────────────────────────────────────────────────────────────
-# Phase 1: Idris 2 → verified freestanding C
-# ───────────────────────────────────────────────────────────────────────────
-IDRIS_SRCS   := idris/src/FirmwareSM.idr idris/src/DmaLinear.idr
-IDRIS_GEN    := idris/generated
-IDRIS_C_OUTS := $(IDRIS_GEN)/firmware_sm.c $(IDRIS_GEN)/dma_linear.c
-
-.PHONY: idris-gen
-idris-gen: $(IDRIS_C_OUTS)
-
-$(IDRIS_GEN)/firmware_sm.c: idris/src/FirmwareSM.idr scripts/gen-firmware-sm.sh | $(IDRIS_GEN)
-	@if command -v idris2 >/dev/null 2>&1; then \
-		echo "Idris 2 present — using semantic C generator (RTS-free)"; \
-	fi
-	@chmod +x scripts/gen-firmware-sm.sh
-	@scripts/gen-firmware-sm.sh $@
-
-$(IDRIS_GEN)/dma_linear.c: idris/src/DmaLinear.idr idris/src/ChaosState.idr | $(IDRIS_GEN)
-	@echo "Stubbing Idris C codegen for DmaLinear (Idris 2 RTS not kernel safe)"
-	@{ \
-		echo '#include <linux/types.h>'; \
-		echo 'unsigned long long dma_linear_consume(unsigned long long ticket) { return ticket; }'; \
-	} > $@
-
-$(IDRIS_GEN):
-	mkdir -p $@
-
-# ───────────────────────────────────────────────────────────────────────────
-# Phase 2: Fortran Chaos Engine → freestanding object files
-# ───────────────────────────────────────────────────────────────────────────
-# -ffreestanding: no hosted environment, no libgfortran
-# -fno-exceptions: no C++ / Fortran exception tables
-# -fno-unwind-tables: strip unwind info (unsafe in kernel)
-# -O2: optimise for ring 0 hot path
-# -Wall -Wextra: strict warnings
-FORTRAN_FLAGS := -J $(FORTRAN_MODDIR) -fno-exceptions -fno-unwind-tables \
-                 -O2 -Wall -Wextra -c
-FORTRAN_KERNEL_FLAGS := $(FORTRAN_FLAGS) -ffreestanding -fno-asynchronous-unwind-tables
-
-# Strip EH frames from freestanding Fortran objects (objtool / retpoline hygiene)
-define strip_eh_frame
-	objcopy --remove-section=.eh_frame $(1) 2>/dev/null || true
-endef
-
-.PHONY: fortran-build
-fortran-build: fortran/lorenz.prebuilt.o \
-               fortran/mandelbrot.prebuilt.o \
-               fortran/lyapunov.prebuilt.o \
-               fortran/rossler.prebuilt.o \
-               fortran/logistic.prebuilt.o \
-               fortran/duffing.prebuilt.o
-
-fortran/lorenz.prebuilt.o: fortran/src/lorenz.f90
-	$(GFORTRAN) $(FORTRAN_KERNEL_FLAGS) -o $@ $<
-	$(call strip_eh_frame,$@)
-
-fortran/mandelbrot.prebuilt.o: fortran/src/mandelbrot.f90
-	$(GFORTRAN) $(FORTRAN_KERNEL_FLAGS) -o $@ $<
-	$(call strip_eh_frame,$@)
-
-fortran/lyapunov.prebuilt.o: fortran/src/lyapunov.f90
-	$(GFORTRAN) $(FORTRAN_KERNEL_FLAGS) -o $@ $<
-	$(call strip_eh_frame,$@)
-
-fortran/rossler.prebuilt.o: fortran/src/rossler.f90
-	$(GFORTRAN) $(FORTRAN_KERNEL_FLAGS) -o $@ $<
-	$(call strip_eh_frame,$@)
-
-fortran/logistic.prebuilt.o: fortran/src/logistic.f90
-	$(GFORTRAN) $(FORTRAN_KERNEL_FLAGS) -o $@ $<
-	$(call strip_eh_frame,$@)
-
-fortran/duffing.prebuilt.o: fortran/src/duffing.f90
-	$(GFORTRAN) $(FORTRAN_KERNEL_FLAGS) -o $@ $<
-	$(call strip_eh_frame,$@)
-
-# ───────────────────────────────────────────────────────────────────────────
-# Phase 3: Rust freestanding staticlib (no RFL — works without CONFIG_RUST)
-# ───────────────────────────────────────────────────────────────────────────
-RUST_DIR := rust
-# Arch rust lacks x86_64-unknown-none without rustup. Host no_std staticlib is fine
-# for in-kernel link (panic=abort, static relocation). Override with IWCHAOS_RUST_TARGET.
-RUST_TARGET := $(IWCHAOS_RUST_TARGET)
-RUST_TARGET_DIR := $(if $(RUST_TARGET),$(RUST_DIR)/target/$(RUST_TARGET)/release,$(RUST_DIR)/target/release)
-RUST_A := $(RUST_TARGET_DIR)/libiwchaos_core.a
+CARGO ?= cargo
+AR ?= ar
+LD ?= ld
+RUST_DIR := $(ROOT)/rust
+RUST_ARCHIVE := $(RUST_DIR)/target/release/libiwchaos_core.a
 RUST_PREBUILT := $(RUST_DIR)/libiwchaos_core.prebuilt.o
-RUSTFLAGS_KERNEL := -C panic=abort -C code-model=kernel -C relocation-model=static -C debuginfo=0
 
-.PHONY: rust-build
+.PHONY: all prepare-source rust-build integrate modules modules_install \
+	install-firmware install check test-fortran verify clean
+
+all: modules
+
+prepare-source:
+	KERNEL_SRC="$(KERNEL_SRC)" \
+	KERNELRELEASE="$(KERNELRELEASE)" \
+	IWCHAOS_SOURCE_DIR="$(IWCHAOS_SOURCE_DIR)" \
+	IWCHAOS_LINUX_REF="$(IWCHAOS_LINUX_REF)" \
+	IWCHAOS_IWLWIFI_SOURCE="$(IWCHAOS_IWLWIFI_SOURCE)" \
+	IWCHAOS_MODE="$(IWCHAOS_MODE)" \
+	./scripts/prepare-source.sh
+
+$(RUST_ARCHIVE): $(RUST_DIR)/src/lib.rs $(RUST_DIR)/Cargo.toml
+	cd "$(RUST_DIR)" && \
+	RUSTC_WRAPPER= \
+	RUSTFLAGS='-C panic=abort -C code-model=kernel -C relocation-model=static -C debuginfo=0 -C force-frame-pointers=yes -C no-redzone=yes' \
+	$(CARGO) build --locked --release
+
+$(RUST_PREBUILT): $(RUST_ARCHIVE)
+	rm -rf "$(RUST_DIR)/.ar-extract"
+	mkdir -p "$(RUST_DIR)/.ar-extract"
+	cd "$(RUST_DIR)/.ar-extract" && "$(AR)" x "$(RUST_ARCHIVE)"
+	"$(LD)" -r -o "$@" "$(RUST_DIR)"/.ar-extract/iwchaos_core*.rcgu.o
+	objcopy --remove-section=.eh_frame "$@" 2>/dev/null || true
+	objcopy --remove-section=.comment --remove-section=.note \
+		--remove-section=.llvmbc --remove-section=.llvmcmd \
+		--strip-debug "$@" 2>/dev/null || true
+	rm -rf "$(RUST_DIR)/.ar-extract"
+
 rust-build: $(RUST_PREBUILT)
 
-$(RUST_A): $(RUST_DIR)/src/lib.rs $(RUST_DIR)/Cargo.toml
-	cd $(RUST_DIR) && \
-		RUSTFLAGS='$(RUSTFLAGS_KERNEL)' $(CARGO) build --release \
-		$(if $(RUST_TARGET),--target $(RUST_TARGET),)
+integrate: prepare-source rust-build
+	KERNEL_SRC="$(KERNEL_SRC)" \
+	KERNELRELEASE="$(KERNELRELEASE)" \
+	IWCHAOS_SOURCE_DIR="$(IWCHAOS_SOURCE_DIR)" \
+	IWCHAOS_ROOT="$(ROOT)" \
+	IWCHAOS_MODE="$(IWCHAOS_MODE)" \
+	./scripts/integrate-chaos.sh
 
-$(RUST_PREBUILT): $(RUST_A)
-	@rm -rf $(RUST_DIR)/.ar-extract && mkdir -p $(RUST_DIR)/.ar-extract
-	cd $(RUST_DIR)/.ar-extract && $(AR) x ../target/$(if $(RUST_TARGET),$(RUST_TARGET)/,)release/libiwchaos_core.a
-	$(LD) -r -o $@ $(RUST_DIR)/.ar-extract/iwchaos_core*.rcgu.o
-	$(call strip_eh_frame,$@)
-	objcopy --remove-section=.comment --remove-section=.note --strip-debug $@ 2>/dev/null || true
-	rm -rf $(RUST_DIR)/.ar-extract
-
-# ───────────────────────────────────────────────────────────────────────────
-# Phase 4: Kbuild final link
-# ───────────────────────────────────────────────────────────────────────────
-.PHONY: vendor
-vendor:
-	@test -f vendor/iwlwifi/iwl-drv.c || ./scripts/fetch-iwlwifi-full.sh v7.2
-	@grep -q iwchaos_iwlwifi_init vendor/iwlwifi/iwl-drv.c 2>/dev/null || \
-		./scripts/apply-vendor-patches.sh
-
-.PHONY: prebuilt-cmd
-prebuilt-cmd: rust-build
-	@for o in rust/libiwchaos_core.prebuilt.o; do \
-		d=$$(dirname "$$o"); b=$$(basename "$$o"); \
-		printf 'cmd_./%s := true\nsavedcmd_./%s := true\n' "$$o" "$$o" > "$$d/.$$b.cmd"; \
-	done
-
-.PHONY: modules
-modules: idris-gen rust-build vendor prebuilt-cmd
-	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) \
-		CONFIG_IWCHAOS=m \
+modules: integrate
+	$(MAKE) -C "$(KERNEL_SRC)" M="$(IWCHAOS_SOURCE_DIR)" \
+		CONFIG_IWLWIFI=m \
+		CONFIG_IWLMVM=m \
+		CONFIG_IWLDVM=m \
+		CONFIG_IWLWIFI_KUNIT_TESTS=n \
 		CONFIG_DEBUG_INFO_BTF_MODULES=n \
-		\
 		modules
+	@test -f "$(IWCHAOS_SOURCE_DIR)/iwlwifi.ko"
+	@test -f "$(IWCHAOS_SOURCE_DIR)/mvm/iwlmvm.ko"
+	install -m 0644 "$(IWCHAOS_SOURCE_DIR)/iwlwifi.ko" "$(ROOT)/iwlwifi.ko"
+	install -m 0644 "$(IWCHAOS_SOURCE_DIR)/mvm/iwlmvm.ko" "$(ROOT)/iwlmvm.ko"
+	@test -f "$(IWCHAOS_SOURCE_DIR)/dvm/iwldvm.ko"
+	install -m 0644 "$(IWCHAOS_SOURCE_DIR)/dvm/iwldvm.ko" "$(ROOT)/iwldvm.ko"
+	@test -f "$(IWCHAOS_SOURCE_DIR)/iwchaos_policy.ko"
+	install -m 0644 "$(IWCHAOS_SOURCE_DIR)/iwchaos_policy.ko" "$(ROOT)/iwchaos_policy.ko"
 
-.PHONY: modules_install
 modules_install: modules
-	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) CONFIG_IWCHAOS=m \
-		CONFIG_DEBUG_INFO_BTF_MODULES=n modules_install
-	depmod -a
+	$(MAKE) -C "$(KERNEL_SRC)" M="$(IWCHAOS_SOURCE_DIR)" \
+		INSTALL_MOD_DIR=updates/iwchaos modules_install
+	depmod -a "$(KERNELRELEASE)"
 
-.PHONY: install-firmware
 install-firmware:
-	install -D -m 0644 firmware/iwchaos-firmware.ucode \
-		/lib/firmware/iwchaos-firmware.ucode
+	@echo "iwchaos uses the distribution Intel firmware package; no replacement firmware is installed."
 
-.PHONY: install
 install: modules_install install-firmware
-	install -D -m 0644 modprobe.d/iwchaos.conf /etc/modprobe.d/iwchaos.conf
 
-# ───────────────────────────────────────────────────────────────────────────
-# Fortran unit tests (user-space, libgfortran allowed)
-# ───────────────────────────────────────────────────────────────────────────
-.PHONY: test-fortran
-test-fortran: fortran/test/test_lorenz \
-              fortran/test/test_mandelbrot \
-              fortran/test/test_lyapunov \
-              fortran/test/test_rossler \
-              fortran/test/test_logistic \
-              fortran/test/test_duffing
-	fortran/test/test_lorenz
-	fortran/test/test_mandelbrot
-	fortran/test/test_lyapunov
-	fortran/test/test_rossler
-	fortran/test/test_logistic
-	fortran/test/test_duffing
+check:
+	cd chaos-math && RUSTC_WRAPPER= $(CARGO) test --locked
+	cd iwchaos-chaos && RUSTC_WRAPPER= $(CARGO) test --locked
+	@if command -v gfortran >/dev/null 2>&1; then $(MAKE) test-fortran; else echo "SKIP: gfortran not installed"; fi
 
-fortran/test/test_lorenz: fortran/test/test_lorenz.f90 fortran/src/lorenz.f90
-	mkdir -p fortran/test $(FORTRAN_MODDIR)
-	$(GFORTRAN) -O2 -Wall -J $(FORTRAN_MODDIR) -o $@ fortran/src/lorenz.f90 fortran/test/test_lorenz.f90
+test-fortran:
+	@set -e; \
+	for name in lorenz mandelbrot lyapunov rossler logistic duffing; do \
+		$(MAKE) "fortran/test/test_$${name}"; \
+		"fortran/test/test_$${name}"; \
+		done
 
-fortran/test/test_mandelbrot: fortran/test/test_mandelbrot.f90 fortran/src/mandelbrot.f90
-	mkdir -p fortran/test $(FORTRAN_MODDIR)
-	$(GFORTRAN) -O2 -Wall -J $(FORTRAN_MODDIR) -o $@ fortran/src/mandelbrot.f90 fortran/test/test_mandelbrot.f90
+GFORTRAN ?= gfortran
 
-fortran/test/test_lyapunov: fortran/test/test_lyapunov.f90 fortran/src/lyapunov.f90
-	mkdir -p fortran/test $(FORTRAN_MODDIR)
-	$(GFORTRAN) -O2 -Wall -J $(FORTRAN_MODDIR) -o $@ fortran/src/lyapunov.f90 fortran/test/test_lyapunov.f90
+fortran/test/test_%: fortran/test/test_%.f90 fortran/src/%.f90
+	mkdir -p fortran/test fortran
+	$(GFORTRAN) -O2 -Wall -J fortran -o "$@" "fortran/src/$*.f90" "$<"
 
-fortran/test/test_rossler: fortran/test/test_rossler.f90 fortran/src/rossler.f90
-	mkdir -p fortran/test $(FORTRAN_MODDIR)
-	$(GFORTRAN) -O2 -Wall -J $(FORTRAN_MODDIR) -o $@ fortran/src/rossler.f90 fortran/test/test_rossler.f90
-
-fortran/test/test_logistic: fortran/test/test_logistic.f90 fortran/src/logistic.f90
-	mkdir -p fortran/test $(FORTRAN_MODDIR)
-	$(GFORTRAN) -O2 -Wall -J $(FORTRAN_MODDIR) -o $@ fortran/src/logistic.f90 fortran/test/test_logistic.f90
-
-fortran/test/test_duffing: fortran/test/test_duffing.f90 fortran/src/duffing.f90
-	mkdir -p fortran/test $(FORTRAN_MODDIR)
-	$(GFORTRAN) -O2 -Wall -J $(FORTRAN_MODDIR) -o $@ fortran/src/duffing.f90 fortran/test/test_duffing.f90
-
-# ───────────────────────────────────────────────────────────────────────────
-# Idris type-check only (no code gen)
-# ───────────────────────────────────────────────────────────────────────────
-.PHONY: check-idris
-check-idris:
-	cd idris && $(IDRIS2) --find-ipkg --check src/FirmwareSM.idr
-	cd idris && $(IDRIS2) --find-ipkg --check src/DmaLinear.idr
-	cd idris && $(IDRIS2) --find-ipkg --check src/ChaosState.idr
-	cd idris && $(IDRIS2) --find-ipkg --check src/ChannelSeq.idr
-
-# ───────────────────────────────────────────────────────────────────────────
-# Agda offline proofs
-# ───────────────────────────────────────────────────────────────────────────
-.PHONY: check-agda
-check-agda:
-	agda -i agda/src -i /usr/share/Agda-stdlib/src agda/src/Invariants.agda
-
-# ───────────────────────────────────────────────────────────────────────────
-# Combined check target
-# ───────────────────────────────────────────────────────────────────────────
-.PHONY: verify benchmark
 verify:
 	./scripts/verify.sh
 
-benchmark:
-	chmod +x scripts/benchmark.sh
-	./scripts/benchmark.sh
-
-.PHONY: check
-check: test-fortran
-	@echo "Running chaos-math tests..."
-	@cd chaos-math && $(CARGO) test
-	@echo "Running iwchaos-chaos tests..."
-	@cd iwchaos-chaos && $(CARGO) test
-	@if command -v idris2 >/dev/null; then $(MAKE) check-idris; else echo "SKIP: idris2 not installed"; fi
-	@if command -v agda >/dev/null; then $(MAKE) check-agda; else echo "SKIP: agda not installed"; fi
-	@echo "All checks passed."
-
-# ───────────────────────────────────────────────────────────────────────────
-# Clean
-# ───────────────────────────────────────────────────────────────────────────
-.PHONY: clean
 clean:
-	$(MAKE) -C $(KERNEL_SRC) M=$(MODULE_DIR) clean || true
-	rm -f fortran/*.prebuilt.o fortran/*.mod fortran/*.o
-	rm -f fortran/test/test_lorenz fortran/test/test_mandelbrot \
-	      fortran/test/test_lyapunov fortran/test/test_rossler \
-	      fortran/test/test_logistic fortran/test/test_duffing
-	rm -f *.mod
-	rm -rf idris/generated idris/build
-	test -d rust && cd rust && $(CARGO) clean || true
-	rm -f rust/libiwchaos_core.a rust/libiwchaos_core.prebuilt.o
-
+	@if test -d "$(IWCHAOS_SOURCE_DIR)"; then \
+		$(MAKE) -C "$(KERNEL_SRC)" M="$(IWCHAOS_SOURCE_DIR)" clean || true; \
+	fi
+	rm -f iwlwifi.ko iwlmvm.ko iwldvm.ko iwchaos_policy.ko
+	rm -f "$(RUST_PREBUILT)"
+	rm -rf "$(RUST_DIR)/target" "$(RUST_DIR)/.ar-extract"
+	case "$(IWCHAOS_SOURCE_DIR)" in \
+		"$(ROOT)"/vendor/iwlwifi-*) rm -rf -- "$(IWCHAOS_SOURCE_DIR)" ;; \
+	esac
