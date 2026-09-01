@@ -31,11 +31,19 @@ KERNEL_BASE="$(read_kernel_field VERSION).$(read_kernel_field PATCHLEVEL).$(read
 LINUX_REF="${IWCHAOS_LINUX_REF:-v${KERNEL_BASE}}"
 
 if [[ -f "${SOURCE_DIR}/.iwchaos-source" ]]; then
-	if grep -qx "ref=${LINUX_REF}" "${SOURCE_DIR}/.iwchaos-source" && \
+	# A packaged ArachOS build may carry the exact source tree selected for the
+	# bootstrap kernel.  The stamp is authoritative for that pre-staged tree;
+	# it may name a stable upstream tag even when the kernel's full release has
+	# a distribution suffix.  Requiring the kernel field prevents that source
+	# from being reused for a different target kernel.
+	if grep -qx "kernel=${KERNELRELEASE}" "${SOURCE_DIR}/.iwchaos-source" && \
 	   test -f "${SOURCE_DIR}/iwl-drv.c" && \
 	   test -f "${SOURCE_DIR}/mvm/Makefile"; then
-		echo "iwchaos: using cached iwlwifi source ${LINUX_REF} for ${KERNELRELEASE}"
-	exit 0
+		cached_ref=$(awk -F= '$1 == "ref" {print $2; exit}' \
+			"${SOURCE_DIR}/.iwchaos-source")
+		[[ -n "${cached_ref}" ]] || die "pre-staged source has no ref stamp"
+		echo "iwchaos: using pre-staged iwlwifi source ${cached_ref} for ${KERNELRELEASE}"
+		exit 0
 	fi
 fi
 
@@ -73,7 +81,18 @@ else
 	echo "iwchaos: fetching iwlwifi source ${LINUX_REF}"
 	if ! git -c advice.detachedHead=false clone --filter=blob:none --no-checkout \
 		--depth 1 --branch "${LINUX_REF}" "${LINUX_REPO}" "${FETCH_ROOT}/linux"; then
-		die "kernel source tag ${LINUX_REF} was not found; set IWCHAOS_LINUX_REF or IWCHAOS_IWLWIFI_SOURCE"
+		# Linux releases with a distribution patch suffix do not always publish
+		# a matching three-component tag.  Try the stable minor tag when the
+		# caller did not explicitly choose a reference.
+		minor_ref="v${KERNEL_BASE%.*}"
+		rm -rf -- "${FETCH_ROOT}/linux"
+		if [[ -z "${IWCHAOS_LINUX_REF:-}" && "${minor_ref}" != "${LINUX_REF}" ]] && \
+		   git -c advice.detachedHead=false clone --filter=blob:none --no-checkout \
+			--depth 1 --branch "${minor_ref}" "${LINUX_REPO}" "${FETCH_ROOT}/linux"; then
+			LINUX_REF="${minor_ref}"
+		else
+			die "kernel source tag ${LINUX_REF} was not found; set IWCHAOS_LINUX_REF or IWCHAOS_IWLWIFI_SOURCE"
+		fi
 	fi
 	git -C "${FETCH_ROOT}/linux" sparse-checkout set drivers/net/wireless/intel/iwlwifi
 	git -C "${FETCH_ROOT}/linux" checkout --quiet

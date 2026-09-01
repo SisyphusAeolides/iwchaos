@@ -24,9 +24,14 @@ make modules \
 
 Source selection is per target kernel:
 
-1. A complete iwlwifi tree in `KERNEL_SRC`, if available.
-2. `IWCHAOS_IWLWIFI_SOURCE`, when supplied.
-3. The matching upstream Linux tag (`vX.Y.Z`) from `IWCHAOS_LINUX_REPO`.
+1. A pre-staged tree with a matching `.iwchaos-source` kernel stamp.
+2. A complete iwlwifi tree in `KERNEL_SRC`, if available.
+3. `IWCHAOS_IWLWIFI_SOURCE`, when supplied.
+4. The matching upstream Linux tag (`vX.Y.Z`) from `IWCHAOS_LINUX_REPO`, with
+   a stable minor-tag fallback when the three-component tag is unavailable.
+
+The ArachOS RPM carries the pinned source tree for its bootstrap kernel, so
+its first DKMS build does not depend on source-host DNS or network access.
 
 For downstream kernels with source changes, provide the matching source tree or
 set `IWCHAOS_LINUX_REF` explicitly. `IWCHAOS_MODE=auto` falls back to stock
