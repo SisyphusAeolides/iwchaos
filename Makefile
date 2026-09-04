@@ -11,6 +11,7 @@ KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 KERNELRELEASE ?= $(shell make -s -C "$(KERNEL_SRC)" kernelversion 2>/dev/null)
 IWCHAOS_SOURCE_DIR := $(ROOT)/vendor/iwlwifi-$(KERNELRELEASE)
 
+export RUSTUP_TOOLCHAIN ?= stable
 CARGO ?= cargo
 AR ?= ar
 LD ?= ld

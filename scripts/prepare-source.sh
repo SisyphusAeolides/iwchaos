@@ -65,6 +65,10 @@ if [[ -z "${IWL_SOURCE}" && -f "${KERNEL_SRC}/drivers/net/wireless/intel/iwlwifi
 	IWL_SOURCE="${KERNEL_SRC}/drivers/net/wireless/intel/iwlwifi"
 	LINUX_REF="kernel-tree"
 fi
+if [[ -z "${IWL_SOURCE}" && -d "${ROOT}/vendor/iwlwifi-${KERNEL_BASE}" ]]; then
+	IWL_SOURCE="${ROOT}/vendor/iwlwifi-${KERNEL_BASE}"
+	LINUX_REF="v${KERNEL_BASE}"
+fi
 if [[ -n "${IWL_SOURCE}" ]]; then
 	if [[ -f "${IWL_SOURCE}/iwl-drv.c" ]]; then
 		:
@@ -79,16 +83,16 @@ else
 	command -v git >/dev/null 2>&1 || die "git is required to fetch ${LINUX_REF}"
 	FETCH_ROOT="$(mktemp -d "${ROOT}/vendor/.iwlwifi-fetch.XXXXXX")"
 	echo "iwchaos: fetching iwlwifi source ${LINUX_REF}"
-	if ! git -c advice.detachedHead=false clone --filter=blob:none --no-checkout \
-		--depth 1 --branch "${LINUX_REF}" "${LINUX_REPO}" "${FETCH_ROOT}/linux"; then
+	if ! (for i in 1 2 3 4 5; do git -c advice.detachedHead=false clone --filter=blob:none --no-checkout \
+		--depth 1 --branch "${LINUX_REF}" "${LINUX_REPO}" "${FETCH_ROOT}/linux" && break; sleep 2; rm -rf "${FETCH_ROOT}/linux"; done); then
 		# Linux releases with a distribution patch suffix do not always publish
 		# a matching three-component tag.  Try the stable minor tag when the
 		# caller did not explicitly choose a reference.
 		minor_ref="v${KERNEL_BASE%.*}"
 		rm -rf -- "${FETCH_ROOT}/linux"
 		if [[ -z "${IWCHAOS_LINUX_REF:-}" && "${minor_ref}" != "${LINUX_REF}" ]] && \
-		   git -c advice.detachedHead=false clone --filter=blob:none --no-checkout \
-			--depth 1 --branch "${minor_ref}" "${LINUX_REPO}" "${FETCH_ROOT}/linux"; then
+		   (for j in 1 2 3 4 5; do git -c advice.detachedHead=false clone --filter=blob:none --no-checkout \
+			--depth 1 --branch "${minor_ref}" "${LINUX_REPO}" "${FETCH_ROOT}/linux" && break; sleep 2; rm -rf "${FETCH_ROOT}/linux"; done); then
 			LINUX_REF="${minor_ref}"
 		else
 			die "kernel source tag ${LINUX_REF} was not found; set IWCHAOS_LINUX_REF or IWCHAOS_IWLWIFI_SOURCE"
