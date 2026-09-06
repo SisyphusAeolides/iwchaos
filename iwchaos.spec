@@ -1,0 +1,86 @@
+Name:           iwchaos
+Version:        0.2.4
+Release:        1%{?dist}
+Summary:        Target-kernel Intel Wi-Fi modules with a bounded rate policy
+
+License:        GPL-2.0-only
+URL:            https://github.com/SisyphusAeolides/iwchaos
+Source0:        https://github.com/SisyphusAeolides/iwchaos/archive/refs/tags/v%{version}.tar.gz
+
+BuildRequires:  binutils
+BuildRequires:  cargo
+BuildRequires:  gcc
+BuildRequires:  git
+BuildRequires:  make
+BuildRequires:  python3
+BuildRequires:  rust
+
+Requires:       binutils
+Requires:       cargo
+Requires:       curl
+Requires:       dkms
+Requires:       gcc
+Requires:       git
+Requires:       make
+Requires:       python3
+Requires:       rust
+
+BuildArch:      noarch
+
+%description
+Target-kernel-compatible Intel iwlwifi, iwlmvm, and iwldvm DKMS modules with a
+small bounded fixed-point rate-policy advisory. The upstream transport and
+firmware interface remain authoritative.
+
+%prep
+%autosetup -n %{name}-%{version}
+
+%build
+
+%install
+mkdir -p %{buildroot}/usr/src/%{name}-%{version}
+cp -a . %{buildroot}/usr/src/%{name}-%{version}/
+install -Dm644 LICENSE %{buildroot}/usr/share/licenses/%{name}/LICENSE
+rm -rf %{buildroot}/usr/src/%{name}-%{version}/.git
+rm -rf %{buildroot}/usr/src/%{name}-%{version}/vendor
+rm -rf %{buildroot}/usr/src/%{name}-%{version}/rust/target
+rm -rf %{buildroot}/usr/src/%{name}-%{version}/rust/.ar-extract
+find %{buildroot}/usr/src/%{name}-%{version} -type f \
+  \( -name '*.o' -o -name '*.ko' -o -name '*.cmd' -o -name '*.d' \) -delete
+
+%post
+if command -v dkms >/dev/null 2>&1; then
+  # A manually pre-registered tree may already contain this exact version.
+  # Do not turn that harmless state into an upgrade error. Force replacement
+  # is required because DKMS otherwise leaves an older unversioned module in
+  # /lib/modules and reports a false installation failure.
+  if [ ! -f "/var/lib/dkms/%{name}/%{version}/source/dkms.conf" ]; then
+    dkms add -m %{name} -v %{version} --rpm_safe_upgrade || :
+  fi
+  dkms autoinstall -m %{name} -v %{version} --force --rpm_safe_upgrade || :
+fi
+
+%preun
+if [ "$1" -eq 0 ] && command -v dkms >/dev/null 2>&1; then
+  dkms remove -m %{name} -v %{version} --all --rpm_safe_upgrade || :
+fi
+
+%files
+/usr/src/%{name}-%{version}/
+/usr/share/licenses/%{name}/LICENSE
+
+%changelog
+* Sun Aug 30 2026 Sisyphus Aeolides <SisyphusAeolides@pm.me> - 0.2.4-1
+- Install target-kernel modules with forced DKMS replacement
+- Keep the DKMS package version aligned with the RPM version
+
+* Sun Aug 30 2026 Sisyphus Aeolides <SisyphusAeolides@pm.me> - 0.2.3-1
+- Detect registered DKMS versions by their source metadata before adding
+
+* Sun Aug 30 2026 Sisyphus Aeolides <SisyphusAeolides@pm.me> - 0.2.2-1
+- Make DKMS upgrades idempotent when the target version is already registered
+
+* Sat Aug 29 2026 Sisyphus Aeolides <SisyphusAeolides@pm.me> - 0.2.1-1
+- Build target-kernel iwlwifi modules with DKMS
+- Remove the monolithic replacement and fake firmware paths
+- Create the build-time source directory before DKMS fetches iwlwifi

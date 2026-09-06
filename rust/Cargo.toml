@@ -1,0 +1,23 @@
+[package]
+name = "iwchaos-core"
+version = "0.2.4"
+edition = "2021"
+license = "GPL-2.0-only"
+description = "Target-kernel Intel Wi-Fi modules with a bounded rate policy (core library)"
+repository = "https://github.com/SisyphusAeolides/iwchaos"
+
+[lib]
+name = "iwchaos_core"
+crate-type = ["staticlib"]
+path = "src/lib.rs"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+overflow-checks = false

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config IWCHAOS
+	tristate "iwchaos: bounded Intel Wi-Fi rate policy"
+	depends on PCI && MAC80211 && CFG80211
+	help
+	  Enables the optional iwchaos policy bridge when the target-kernel
+	  iwlmvm source is integrated by the external DKMS build. The upstream
+	  iwlwifi, iwlmvm, and iwldvm modules remain the driver modules.
+
+	  If unsure, say N.

@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# iwchaos — top-level .gitignore
+
+# Rust build artifacts
+rust/target/
+chaos-math/target/
+rust/.ar-extract/
+rust/libiwchaos_core.a
+rust/libiwchaos_core.prebuilt.o
+*.BTF.*
+iwchaos-chaos/target/
+
+# Fortran compiled objects and test binaries
+fortran/*.o
+fortran/*.mod
+fortran/test/test_lorenz
+fortran/test/test_mandelbrot
+fortran/test/test_lyapunov
+fortran/test/test_rossler
+fortran/test/test_logistic
+fortran/test/test_duffing
+*.mod
+
+# Idris 2 generated C
+idris/generated/
+idris/build/
+
+# Kernel build artifacts
+*.ko
+*.o
+*.mod
+*.mod.c
+*.mod.o
+*.symvers
+*.order
+.tmp_versions/
+Module.symvers
+modules.order
+
+# Vendored iwlwifi (fetched at build time)
+vendor/
+vendor.clean/
+
+# Agda checked modules
+agda/**/*.agdai
+
+# Editor artifacts
+.vscode/
+*.swp
+*~
+
+# PDF architecture doc stays tracked
+!iwchaos_architecture_blueprint.pdf
+.*.cmd
+.*.d
+c/.*.cmd
+c/.*.d
+c/*.o
+idris/test_build/
