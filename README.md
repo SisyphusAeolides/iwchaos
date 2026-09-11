@@ -30,7 +30,7 @@ Source selection is per target kernel:
 4. The matching upstream Linux tag (`vX.Y.Z`) from `IWCHAOS_LINUX_REPO`, with
    a stable minor-tag fallback when the three-component tag is unavailable.
 
-The ArachOS dnf package carries the pinned source tree for its bootstrap
+The Fedora dnf package carries the pinned source tree for its bootstrap
 kernel, so its first DKMS build does not depend on source-host DNS or network
 access.
 
