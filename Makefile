@@ -11,7 +11,6 @@ KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 KERNELRELEASE ?= $(shell make -s -C "$(KERNEL_SRC)" kernelversion 2>/dev/null)
 IWCHAOS_SOURCE_DIR := $(ROOT)/vendor/iwlwifi-$(KERNELRELEASE)
 
-export RUSTUP_TOOLCHAIN ?= stable
 CARGO ?= cargo
 AR ?= ar
 LD ?= ld
@@ -46,7 +45,6 @@ prepare-source:
 
 $(RUST_ARCHIVE): $(RUST_DIR)/src/lib.rs $(RUST_DIR)/Cargo.toml
 	cd "$(RUST_DIR)" && \
-	RUSTC_WRAPPER= \
 	RUSTFLAGS='-C panic=abort -C code-model=kernel -C relocation-model=static -C debuginfo=0 -C force-frame-pointers=yes -C no-redzone=yes' \
 	$(CARGO) build --locked --release
 
@@ -99,8 +97,8 @@ install-firmware:
 install: modules_install install-firmware
 
 check:
-	cd chaos-math && RUSTC_WRAPPER= $(CARGO) test --locked
-	cd iwchaos-chaos && RUSTC_WRAPPER= $(CARGO) test --locked
+	cd chaos-math && $(CARGO) test --locked
+	cd iwchaos-chaos && $(CARGO) test --locked
 	@if command -v gfortran >/dev/null 2>&1; then $(MAKE) test-fortran; else echo "SKIP: gfortran not installed"; fi
 
 test-fortran:
