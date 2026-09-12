@@ -12,6 +12,17 @@ so normal `modprobe` dependency handling and kernel fallback behavior continue
 to work. The project does not replace Intel firmware and does not blacklist or
 alias the distribution driver.
 
+## Install on Arch-based systems
+
+The tested package is published in the Sisyphus Arch repository. Configure that
+repository as described in [Sisyphus-Repo](https://github.com/SisyphusAeolides/Sisyphus-Repo),
+then install it with pacman:
+
+```sh
+sudo pacman -Syu
+sudo pacman -S iwchaos
+```
+
 ## Target-kernel build
 
 Install matching kernel development files, then run:
