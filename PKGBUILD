@@ -83,6 +83,9 @@ package() {
   cp -a . "$_dest/"
   rm -rf "$_dest/.git" "$_dest/.github"
   rm -rf "$_dest/rust/target" "$_dest/rust/.ar-extract"
+  # The prebuilt object is part of the DKMS source. Do not make every kernel
+  # install rebuild the Rust library just because its archive was omitted.
+  sed -i 's/^rust-build: \$(RUST_PREBUILT)/rust-build:/' "$_dest/Makefile"
   find "$_dest" -type f \
     \( -name '*.o' ! -name 'libiwchaos_core.prebuilt.o' -o -name '*.ko' -o -name '*.cmd' -o -name '*.d' \) -delete
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
