@@ -14,7 +14,10 @@ extern u8 iwchaos_chaos_rate_select_rust(u8 sta_id, u8 index, int low, int high)
 extern void iwchaos_chaos_tx_feedback_rust(u8 sta_id, int success, int snr_db);
 extern void iwchaos_chaos_sta_release_rust(u8 sta_id);
 
-static DEFINE_SPINLOCK(iwchaos_state_lock);
+#define IWCHAOS_STATION_COUNT 256
+
+/* Independent locks keep one busy station from stalling every rate update. */
+static spinlock_t iwchaos_state_locks[IWCHAOS_STATION_COUNT];
 static bool iwchaos_enabled = true;
 
 module_param_named(iwchaos, iwchaos_enabled, bool, 0644);
@@ -29,9 +32,9 @@ u8 iwchaos_chaos_rate_select(u8 sta_id, u8 index, int low, int high)
 	if (!READ_ONCE(iwchaos_enabled))
 		return index;
 
-	spin_lock_irqsave(&iwchaos_state_lock, flags);
+	spin_lock_irqsave(&iwchaos_state_locks[sta_id], flags);
 	out = iwchaos_chaos_rate_select_rust(sta_id, index, low, high);
-	spin_unlock_irqrestore(&iwchaos_state_lock, flags);
+	spin_unlock_irqrestore(&iwchaos_state_locks[sta_id], flags);
 
 	return out;
 }
@@ -44,9 +47,9 @@ void iwchaos_chaos_tx_feedback(u8 sta_id, int success, int snr_db)
 	if (!READ_ONCE(iwchaos_enabled))
 		return;
 
-	spin_lock_irqsave(&iwchaos_state_lock, flags);
+	spin_lock_irqsave(&iwchaos_state_locks[sta_id], flags);
 	iwchaos_chaos_tx_feedback_rust(sta_id, success, snr_db);
-	spin_unlock_irqrestore(&iwchaos_state_lock, flags);
+	spin_unlock_irqrestore(&iwchaos_state_locks[sta_id], flags);
 }
 EXPORT_SYMBOL_GPL(iwchaos_chaos_tx_feedback);
 
@@ -54,14 +57,18 @@ void iwchaos_chaos_sta_release(u8 sta_id)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&iwchaos_state_lock, flags);
+	spin_lock_irqsave(&iwchaos_state_locks[sta_id], flags);
 	iwchaos_chaos_sta_release_rust(sta_id);
-	spin_unlock_irqrestore(&iwchaos_state_lock, flags);
+	spin_unlock_irqrestore(&iwchaos_state_locks[sta_id], flags);
 }
 EXPORT_SYMBOL_GPL(iwchaos_chaos_sta_release);
 
 static int __init iwchaos_policy_init(void)
 {
+	unsigned int sta_id;
+
+	for (sta_id = 0; sta_id < IWCHAOS_STATION_COUNT; ++sta_id)
+		spin_lock_init(&iwchaos_state_locks[sta_id]);
 	return 0;
 }
 

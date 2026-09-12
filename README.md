@@ -30,9 +30,11 @@ Source selection is per target kernel:
 4. The matching upstream Linux tag (`vX.Y.Z`) from `IWCHAOS_LINUX_REPO`, with
    a stable minor-tag fallback when the three-component tag is unavailable.
 
-The Fedora dnf package carries the pinned source tree for its bootstrap
-kernel, so its first DKMS build does not depend on source-host DNS or network
-access.
+The Arch package carries a pinned source baseline for its bootstrap kernel, so
+its first DKMS build does not depend on source-host DNS or network access. A
+local `makepkg` build also stages the base source for every installed kernel;
+set `IWCHAOS_KERNEL_BASE=X.Y.Z` to choose a different upstream baseline when
+building the package.
 
 For downstream kernels with source changes, provide the matching source tree or
 set `IWCHAOS_LINUX_REF` explicitly. `IWCHAOS_MODE=auto` falls back to stock
@@ -47,9 +49,10 @@ kernel spinlock and leaves the stock rate accounting authoritative.
 
 ## DKMS
 
-The DKMS recipe builds separately for every installed kernel and fetches only
-the target kernel's iwlwifi source when the kernel-devel package contains no
-full source tree:
+The DKMS recipe builds separately for every installed kernel. It uses the
+matching source staged in the package or a complete source tree exposed by the
+kernel build directory. If neither is available, provide a matching source
+tree with `IWCHAOS_IWLWIFI_SOURCE` before invoking DKMS:
 
 ```sh
 sudo dkms add -m iwchaos -v 0.2.4

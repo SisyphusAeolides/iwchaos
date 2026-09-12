@@ -1,7 +1,7 @@
 # Maintainer: Kenny Glauner <SisyphusAeolides@pm.me>
 pkgname=iwchaos
 pkgver=0.2.4
-pkgrel=1
+pkgrel=6
 _commit=HEAD
 pkgdesc="Target-kernel Intel Wi-Fi modules with a bounded rate policy"
 arch=('x86_64')
@@ -26,24 +26,47 @@ sha256sums=('SKIP')
 prepare() {
   cd "$pkgname"
   mkdir -p vendor
-  
+
+  # The published package is built in an Arch container without installed
+  # kernel trees.  Keep a source baseline in the package so DKMS does not
+  # need network access during installation.  A local makepkg run also adds
+  # the base version for every installed kernel.
+  local bootstrap_base="${IWCHAOS_KERNEL_BASE:-7.2.4}"
+  local -a kernel_bases=("$bootstrap_base")
+
   for kdir in /usr/lib/modules/*/build/Makefile; do
     [ -f "$kdir" ] || continue
     local kver=$(awk -F= -v key="VERSION" '$1 ~ "^" key "[[:space:]]*$" {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$kdir")
     local kpatch=$(awk -F= -v key="PATCHLEVEL" '$1 ~ "^" key "[[:space:]]*$" {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$kdir")
     local ksub=$(awk -F= -v key="SUBLEVEL" '$1 ~ "^" key "[[:space:]]*$" {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$kdir")
     local KERNEL_BASE="${kver}.${kpatch}.${ksub}"
-    
-    if [ ! -d "vendor/iwlwifi-${KERNEL_BASE}" ]; then
-      local FETCH_ROOT=$(mktemp -d "${PWD}/vendor/.iwlwifi-fetch.XXXXXX")
-      if git -c advice.detachedHead=false clone --filter=blob:none --no-checkout \
-          --depth 1 --branch "v${KERNEL_BASE}" https://github.com/gregkh/linux.git "${FETCH_ROOT}/linux"; then
-        git -C "${FETCH_ROOT}/linux" sparse-checkout set drivers/net/wireless/intel/iwlwifi
-        git -C "${FETCH_ROOT}/linux" checkout --quiet
-        cp -a -- "${FETCH_ROOT}/linux/drivers/net/wireless/intel/iwlwifi" "vendor/iwlwifi-${KERNEL_BASE}"
-      fi
-      rm -rf "${FETCH_ROOT}"
+    [ -n "$KERNEL_BASE" ] && kernel_bases+=("$KERNEL_BASE")
+  done
+
+  local -A seen=()
+  local KERNEL_BASE FETCH_ROOT
+  for KERNEL_BASE in "${kernel_bases[@]}"; do
+    [ -n "$KERNEL_BASE" ] || continue
+    [ -z "${seen[$KERNEL_BASE]:-}" ] || continue
+    seen["$KERNEL_BASE"]=1
+    [ -d "vendor/iwlwifi-${KERNEL_BASE}" ] && continue
+
+    FETCH_ROOT=$(mktemp -d "${PWD}/vendor/.iwlwifi-fetch.XXXXXX")
+    echo "iwchaos: staging iwlwifi source v${KERNEL_BASE}"
+    if ! git -c advice.detachedHead=false clone --filter=blob:none --no-checkout \
+        --depth 1 --branch "v${KERNEL_BASE}" \
+        https://github.com/gregkh/linux.git "${FETCH_ROOT}/linux"; then
+      rm -rf -- "$FETCH_ROOT"
+      error "could not fetch Linux tag v${KERNEL_BASE}; set IWCHAOS_KERNEL_BASE to an available tag or provide a local source tree"
     fi
+    git -C "${FETCH_ROOT}/linux" sparse-checkout set drivers/net/wireless/intel/iwlwifi
+    git -C "${FETCH_ROOT}/linux" checkout --quiet
+    [ -f "${FETCH_ROOT}/linux/drivers/net/wireless/intel/iwlwifi/iwl-drv.c" ] || {
+      rm -rf -- "$FETCH_ROOT"
+      error "Linux tag v${KERNEL_BASE} has no iwlwifi source tree"
+    }
+    cp -a -- "${FETCH_ROOT}/linux/drivers/net/wireless/intel/iwlwifi" "vendor/iwlwifi-${KERNEL_BASE}"
+    rm -rf -- "$FETCH_ROOT"
   done
 }
 

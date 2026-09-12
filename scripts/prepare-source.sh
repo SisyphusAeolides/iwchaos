@@ -31,8 +31,8 @@ KERNEL_BASE="$(read_kernel_field VERSION).$(read_kernel_field PATCHLEVEL).$(read
 LINUX_REF="${IWCHAOS_LINUX_REF:-v${KERNEL_BASE}}"
 
 if [[ -f "${SOURCE_DIR}/.iwchaos-source" ]]; then
-	# A packaged Fedora build may carry the exact source tree selected for the
-	# bootstrap kernel.  The stamp is authoritative for that pre-staged tree;
+	# A package may carry the exact source tree selected for a bootstrap kernel.
+	# The stamp is authoritative for that pre-staged tree;
 	# it may name a stable upstream tag even when the kernel's full release has
 	# a distribution suffix.  Requiring the kernel field prevents that source
 	# from being reused for a different target kernel.

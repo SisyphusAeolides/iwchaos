@@ -19,8 +19,19 @@ RUST_DIR := $(ROOT)/rust
 RUST_ARCHIVE := $(RUST_DIR)/target/release/libiwchaos_core.a
 RUST_PREBUILT := $(RUST_DIR)/libiwchaos_core.prebuilt.o
 
+# CachyOS and other tuned kernels may be built with Clang. Detect that from
+# the target configuration so a manual build uses the same toolchain as DKMS.
+ifeq ($(origin LLVM), undefined)
+ifneq ($(wildcard $(KERNEL_SRC)/.config),)
+ifneq ($(shell if grep -q '^CONFIG_CC_IS_CLANG=y' "$(KERNEL_SRC)/.config"; then echo yes; fi),)
+LLVM := 1
+endif
+endif
+endif
+KERNEL_LLVM_ARGS := $(if $(strip $(LLVM)),LLVM=$(LLVM))
+
 .PHONY: all prepare-source rust-build integrate modules modules_install \
-	install-firmware install check test-fortran verify clean
+	install-firmware install check test-fortran verify bench-policy clean
 
 all: modules
 
@@ -61,7 +72,7 @@ integrate: prepare-source rust-build
 	./scripts/integrate-chaos.sh
 
 modules: integrate
-	$(MAKE) -C "$(KERNEL_SRC)" M="$(IWCHAOS_SOURCE_DIR)" \
+	$(MAKE) -C "$(KERNEL_SRC)" $(KERNEL_LLVM_ARGS) M="$(IWCHAOS_SOURCE_DIR)" \
 		CONFIG_IWLWIFI=m \
 		CONFIG_IWLMVM=m \
 		CONFIG_IWLDVM=m \
@@ -78,7 +89,7 @@ modules: integrate
 	install -m 0644 "$(IWCHAOS_SOURCE_DIR)/iwchaos_policy.ko" "$(ROOT)/iwchaos_policy.ko"
 
 modules_install: modules
-	$(MAKE) -C "$(KERNEL_SRC)" M="$(IWCHAOS_SOURCE_DIR)" \
+	$(MAKE) -C "$(KERNEL_SRC)" $(KERNEL_LLVM_ARGS) M="$(IWCHAOS_SOURCE_DIR)" \
 		INSTALL_MOD_DIR=updates/iwchaos modules_install
 	depmod -a "$(KERNELRELEASE)"
 
@@ -107,6 +118,11 @@ fortran/test/test_%: fortran/test/test_%.f90 fortran/src/%.f90
 
 verify:
 	./scripts/verify.sh
+
+bench-policy: rust-build
+	$(CC) -O3 -Wall -Wextra -std=c11 bench/policy-bench.c \
+		"$(RUST_ARCHIVE)" -no-pie -o bench/policy-bench
+	./bench/policy-bench
 
 clean:
 	@if test -d "$(IWCHAOS_SOURCE_DIR)"; then \

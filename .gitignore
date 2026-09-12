@@ -57,3 +57,6 @@ c/.*.cmd
 c/.*.d
 c/*.o
 idris/test_build/
+
+# Local policy benchmark binary
+bench/policy-bench
