@@ -12,16 +12,18 @@ so normal `modprobe` dependency handling and kernel fallback behavior continue
 to work. The project does not replace Intel firmware and does not blacklist or
 alias the distribution driver.
 
-## Install on Arch-based systems
+## Install on Fedora / RHEL / CentOS Stream
 
-The tested package is published in the Sisyphus Arch repository. Configure that
-repository as described in [Sisyphus-Repo](https://github.com/SisyphusAeolides/Sisyphus-Repo),
-then install it with pacman:
+The package is available from the Sisyphus COPR repository:
 
 ```sh
-sudo pacman -Syu
-sudo pacman -S iwchaos
+sudo dnf copr enable sisyphuscode/iwchaos
+sudo dnf install iwchaos
 ```
+
+The package registers the DKMS source tree and builds the four kernel modules
+(`iwlwifi.ko`, `iwlmvm.ko`, `iwldvm.ko`, `iwchaos_policy.ko`) for each
+installed kernel automatically.
 
 ## Target-kernel build
 
@@ -41,9 +43,9 @@ Source selection is per target kernel:
 4. The matching upstream Linux tag (`vX.Y.Z`) from `IWCHAOS_LINUX_REPO`, with
    a stable minor-tag fallback when the three-component tag is unavailable.
 
-The Arch package carries a pinned source baseline for its bootstrap kernel, so
+The RPM package carries a pinned source baseline for its bootstrap kernel, so
 its first DKMS build does not depend on source-host DNS or network access. A
-local `makepkg` build also stages the base source for every installed kernel;
+local RPM build also stages the base source for every installed kernel;
 set `IWCHAOS_KERNEL_BASE=X.Y.Z` to choose a different upstream baseline when
 building the package.
 
